@@ -3,6 +3,7 @@ package com.kareem.nexus.data.repository
 import com.kareem.nexus.core.model.*
 import com.kareem.nexus.data.local.*
 import com.kareem.nexus.domain.repository.NexusRepository
+import java.security.MessageDigest
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.map
 import javax.inject.Inject
@@ -31,20 +32,24 @@ class OfflineNexusRepository @Inject constructor(
     override fun observationCount(): Flow<Int> = dao.observeObservationCount()
     override fun interestCount(): Flow<Int> = dao.observeInterestCount()
 
-    override suspend fun seedFirstRun() {
-        val now = System.currentTimeMillis()
-        dao.upsertDiscovery(
-            DiscoveryEntity(
-                id = "system-update-1-ready",
-                type = DiscoveryType.DISCOVERY.name,
-                title = "NEXUS is ready",
-                summary = "The local intelligence foundation is running.",
-                whyThis = "Update 1 installed the memory, interest, discovery and action core.",
-                sourceUrl = null,
-                score = 1.0,
-                dismissed = false,
-                createdAt = now,
+    override suspend fun captureObservation(type: ObservationType, rawText: String, source: String?, metadataJson: String) {
+        val clean = rawText.trim().replace(Regex("\\s+"), " ")
+        if (clean.isBlank()) return
+        val identity = "${type.name}|${source.orEmpty()}|$clean"
+        val digest = MessageDigest.getInstance("SHA-256").digest(identity.toByteArray())
+            .joinToString("") { "%02x".format(it) }
+        dao.upsertObservation(
+            ObservationEntity(
+                id = digest,
+                type = type.name,
+                rawText = rawText.trim(),
+                normalizedText = clean.lowercase(),
+                source = source,
+                metadataJson = metadataJson,
+                createdAt = System.currentTimeMillis(),
             )
         )
     }
+
+    override suspend fun seedFirstRun() = Unit
 }

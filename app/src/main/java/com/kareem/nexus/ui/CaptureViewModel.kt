@@ -1,0 +1,61 @@
+package com.kareem.nexus.ui
+
+import androidx.lifecycle.ViewModel
+import androidx.lifecycle.viewModelScope
+import com.kareem.nexus.core.model.ObservationType
+import com.kareem.nexus.domain.repository.NexusRepository
+import com.kareem.nexus.ingest.ShareIngestor
+import com.kareem.nexus.observe.UsageObservationReader
+import dagger.hilt.android.lifecycle.HiltViewModel
+import javax.inject.Inject
+import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.flow.StateFlow
+import kotlinx.coroutines.flow.asStateFlow
+import kotlinx.coroutines.flow.update
+import kotlinx.coroutines.launch
+
+data class CaptureUiState(
+    val message: String? = null,
+    val busy: Boolean = false,
+    val usageAccess: Boolean = false,
+)
+
+@HiltViewModel
+class CaptureViewModel @Inject constructor(
+    private val repository: NexusRepository,
+    private val shareIngestor: ShareIngestor,
+    private val usageReader: UsageObservationReader,
+) : ViewModel() {
+    private val _state = MutableStateFlow(CaptureUiState(usageAccess = usageReader.hasAccess()))
+    val state: StateFlow<CaptureUiState> = _state.asStateFlow()
+
+    fun captureText(text: String) {
+        if (text.isBlank()) return
+        viewModelScope.launch {
+            repository.captureObservation(
+                if (text.trim().startsWith("http://") || text.trim().startsWith("https://")) ObservationType.SHARED_LINK else ObservationType.MANUAL,
+                text,
+                "NEXUS",
+            )
+            _state.update { it.copy(message = "Saved to NEXUS") }
+        }
+    }
+
+    fun ingestShare(intent: android.content.Intent) {
+        viewModelScope.launch {
+            _state.update { it.copy(busy = true) }
+            val count = shareIngestor.ingest(intent)
+            _state.update { it.copy(busy = false, message = if (count > 0) "Captured $count item${if (count == 1) "" else "s"}" else null) }
+        }
+    }
+
+    fun refreshUsageAccess() = _state.update { it.copy(usageAccess = usageReader.hasAccess()) }
+
+    fun captureUsage() {
+        viewModelScope.launch {
+            _state.update { it.copy(busy = true) }
+            val count = usageReader.captureLast24Hours()
+            _state.update { it.copy(busy = false, usageAccess = usageReader.hasAccess(), message = if (count > 0) "Learned from $count apps" else "Usage access is required") }
+        }
+    }
+}

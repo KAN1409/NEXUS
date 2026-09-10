@@ -24,7 +24,7 @@ interface NexusDao {
     suspend fun addFeedback(entity: FeedbackEntity)
 
     @Query("SELECT * FROM observations ORDER BY createdAt DESC LIMIT :limit")
-    fun observeRecentObservations(limit: Int = 50): Flow<List<ObservationEntity>>
+    fun observeRecentObservations(limit: Int = 100): Flow<List<ObservationEntity>>
 
     @Query("SELECT * FROM interests ORDER BY (affinity * confidence + momentum) DESC LIMIT :limit")
     fun observeTopInterests(limit: Int = 30): Flow<List<InterestEntity>>

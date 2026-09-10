@@ -33,9 +33,12 @@ fun NexusApp(viewModel: CaptureViewModel = hiltViewModel()) {
         containerColor = NexusColors.Background,
         floatingActionButton = {
             if (destination == NexusDestination.ForYou || destination == NexusDestination.Memory) {
-                FloatingActionButton(onClick = { showCapture = true }, containerColor = NexusColors.Violet) {
-                    NexusIcon(NexusIconType.Capture, Modifier.size(25.dp), NexusColors.TextPrimary, NexusColors.Cyan)
-                }
+                ExtendedFloatingActionButton(
+                    onClick = { showCapture = true },
+                    containerColor = NexusColors.Violet,
+                    icon = { NexusIcon(NexusIconType.Capture, Modifier.size(22.dp), NexusColors.TextPrimary, NexusColors.Cyan) },
+                    text = { Text("Add") },
+                )
             }
         },
         bottomBar = {
@@ -63,7 +66,7 @@ fun NexusApp(viewModel: CaptureViewModel = hiltViewModel()) {
             destination == NexusDestination.ForYou -> HomeScreen(contentPadding = padding)
             destination == NexusDestination.Memory -> ObservationsScreen(contentPadding = padding)
             destination == NexusDestination.Discover -> PlaceholderScreen("Discover", "Fresh things worth your attention.", padding)
-            destination == NexusDestination.Activity -> PlaceholderScreen("Activity", "NEXUS activity will become a transparent timeline of observations and actions.", padding)
+            destination == NexusDestination.Activity -> PlaceholderScreen("Activity", "Your observation and action history will appear here as NEXUS starts working for you.", padding)
             else -> SettingsScreen(padding, captureState, { context.startActivity(Intent("android.settings.ACTION_NOTIFICATION_LISTENER_SETTINGS")) }, { context.startActivity(Intent(Settings.ACTION_USAGE_ACCESS_SETTINGS)) }, viewModel::captureUsage)
         }
     }

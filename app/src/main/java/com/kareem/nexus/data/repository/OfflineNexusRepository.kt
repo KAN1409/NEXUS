@@ -59,6 +59,7 @@ class OfflineNexusRepository @Inject constructor(
     }
 
     override suspend fun rebuildUnderstanding() {
+        dao.removeDuplicateUsageSnapshots()
         val rows = dao.recentObservationsOnce()
         val scores = linkedMapOf<String, Double>()
 

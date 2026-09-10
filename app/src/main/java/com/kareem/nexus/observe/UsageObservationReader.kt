@@ -34,14 +34,21 @@ class UsageObservationReader @Inject constructor(
         val start = end - 24L * 60L * 60L * 1000L
         val rows = manager.queryUsageStats(UsageStatsManager.INTERVAL_DAILY, start, end).orEmpty()
             .filter { it.totalTimeInForeground > 0 && it.packageName != context.packageName }
-            .sortedByDescending { it.totalTimeInForeground }
+            .groupBy { it.packageName }
+            .mapValues { (_, stats) -> stats.sumOf { it.totalTimeInForeground } }
+            .toList()
+            .sortedByDescending { it.second }
             .take(20)
-        rows.forEach { stat ->
+        rows.forEach { (packageName, foregroundMs) ->
+            val label = runCatching {
+                val info = context.packageManager.getApplicationInfo(packageName, 0)
+                context.packageManager.getApplicationLabel(info).toString()
+            }.getOrDefault(packageName.substringAfterLast('.'))
             repository.captureObservation(
                 ObservationType.APP_USAGE,
-                "${stat.packageName} used for ${stat.totalTimeInForeground / 60000} minutes in the last day",
-                stat.packageName,
-                "{\"foregroundMs\":${stat.totalTimeInForeground}}",
+                "$label · ${foregroundMs / 60000} min in the last 24 hours",
+                packageName,
+                "{\"foregroundMs\":$foregroundMs}",
             )
         }
         return rows.size

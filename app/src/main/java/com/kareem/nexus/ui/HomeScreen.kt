@@ -56,6 +56,19 @@ fun HomeScreen(
             }
         }
 
+        if (state.interests.isNotEmpty()) {
+            item {
+                Column(verticalArrangement = Arrangement.spacedBy(NexusSpacing.Sm)) {
+                    Text("NEXUS is learning", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold)
+                    Text(
+                        state.interests.take(3).joinToString("  ·  ") { it.label },
+                        style = MaterialTheme.typography.bodyMedium,
+                        color = NexusColors.Cyan,
+                    )
+                }
+            }
+        }
+
         item {
             Text("For You", style = MaterialTheme.typography.headlineSmall, fontWeight = FontWeight.Bold)
         }

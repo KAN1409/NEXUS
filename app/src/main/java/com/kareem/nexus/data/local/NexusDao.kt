@@ -52,4 +52,16 @@ interface NexusDao {
 
     @Query("DELETE FROM observations WHERE type = 'APP_USAGE' AND source = :source AND id != :keepId")
     suspend fun deleteOtherUsageSnapshots(source: String, keepId: String)
+
+    @Query("""DELETE FROM observations
+        WHERE type = 'APP_USAGE'
+        AND id NOT IN (
+            SELECT o.id FROM observations o
+            WHERE o.type = 'APP_USAGE'
+            AND o.createdAt = (
+                SELECT MAX(i.createdAt) FROM observations i
+                WHERE i.type = 'APP_USAGE' AND i.source = o.source
+            )
+        )""")
+    suspend fun removeDuplicateUsageSnapshots()
 }

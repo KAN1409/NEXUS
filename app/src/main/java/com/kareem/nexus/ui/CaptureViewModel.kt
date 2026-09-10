@@ -29,6 +29,12 @@ class CaptureViewModel @Inject constructor(
     private val _state = MutableStateFlow(CaptureUiState(usageAccess = usageReader.hasAccess()))
     val state: StateFlow<CaptureUiState> = _state.asStateFlow()
 
+    init {
+        viewModelScope.launch {
+            repository.rebuildUnderstanding()
+        }
+    }
+
     fun captureText(text: String) {
         if (text.isBlank()) return
         viewModelScope.launch {

@@ -16,6 +16,7 @@ data class HomeUiState(
     val observationCount: Int = 0,
     val interestCount: Int = 0,
     val observations: List<Observation> = emptyList(),
+    val interests: List<com.kareem.nexus.core.model.Interest> = emptyList(),
     val discoveries: List<Discovery> = emptyList(),
     val readyActionCount: Int = 0,
 )
@@ -28,9 +29,10 @@ class HomeViewModel @Inject constructor(
         repository.observationCount(),
         repository.interestCount(),
         repository.observations(),
+        repository.interests(),
         repository.discoveries(),
         repository.readyActions(),
-    ) { observationsCount, interests, observations, discoveries, actions ->
-        HomeUiState(observationsCount, interests, observations, discoveries, actions.size)
+    ) { observationsCount, interestCount, observations, interests, discoveries, actions ->
+        HomeUiState(observationsCount, interestCount, observations, interests, discoveries, actions.size)
     }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), HomeUiState())
 }

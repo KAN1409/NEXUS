@@ -40,4 +40,16 @@ interface NexusDao {
 
     @Query("SELECT COUNT(*) FROM interests")
     fun observeInterestCount(): Flow<Int>
+
+    @Query("SELECT * FROM observations ORDER BY createdAt DESC LIMIT :limit")
+    suspend fun recentObservationsOnce(limit: Int = 200): List<ObservationEntity>
+
+    @Query("DELETE FROM interests")
+    suspend fun clearInterests()
+
+    @Query("DELETE FROM discoveries")
+    suspend fun clearDiscoveries()
+
+    @Query("DELETE FROM observations WHERE type = 'APP_USAGE' AND source = :source AND id != :keepId")
+    suspend fun deleteOtherUsageSnapshots(source: String, keepId: String)
 }

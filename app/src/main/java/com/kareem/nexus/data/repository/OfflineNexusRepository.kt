@@ -35,7 +35,11 @@ class OfflineNexusRepository @Inject constructor(
     override suspend fun captureObservation(type: ObservationType, rawText: String, source: String?, metadataJson: String) {
         val clean = rawText.trim().replace(Regex("\\s+"), " ")
         if (clean.isBlank()) return
-        val identity = "${type.name}|${source.orEmpty()}|$clean"
+        val identity = if (type == ObservationType.APP_USAGE) {
+            "${type.name}|${source.orEmpty()}"
+        } else {
+            "${type.name}|${source.orEmpty()}|$clean"
+        }
         val digest = MessageDigest.getInstance("SHA-256").digest(identity.toByteArray())
             .joinToString("") { "%02x".format(it) }
         dao.upsertObservation(

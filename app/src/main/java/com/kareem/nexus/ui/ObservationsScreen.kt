@@ -3,6 +3,7 @@ package com.kareem.nexus.ui
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
+import com.kareem.nexus.core.model.ObservationType
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Modifier
@@ -32,11 +33,28 @@ fun ObservationsScreen(contentPadding: PaddingValues, viewModel: HomeViewModel =
             }
         }
         items(state.observations, key = Observation::id) { observation ->
-            Surface(color = NexusColors.Surface, shape = MaterialTheme.shapes.large) {
-                Column(Modifier.padding(18.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
-                    Text(observation.type.name.replace('_', ' '), color = NexusColors.Violet, style = MaterialTheme.typography.labelLarge)
+            Surface(
+                modifier = Modifier.fillMaxWidth(),
+                color = NexusColors.Surface,
+                shape = MaterialTheme.shapes.large,
+            ) {
+                Column(Modifier.fillMaxWidth().padding(18.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
+                    Text(
+                        when (observation.type) {
+                            ObservationType.APP_USAGE -> "APP USAGE"
+                            ObservationType.SHARED_LINK -> "LINK"
+                            ObservationType.SHARED_TEXT -> "SHARED"
+                            ObservationType.IMAGE -> "IMAGE"
+                            ObservationType.NOTIFICATION -> "NOTIFICATION"
+                            ObservationType.MANUAL -> "NOTE"
+                        },
+                        color = NexusColors.Violet,
+                        style = MaterialTheme.typography.labelLarge,
+                    )
                     Text(observation.rawText, maxLines = 5, style = MaterialTheme.typography.bodyLarge)
-                    observation.source?.let { Text(it, color = NexusColors.TextSecondary, style = MaterialTheme.typography.bodySmall) }
+                    if (observation.type != ObservationType.APP_USAGE) {
+                        observation.source?.let { Text(it, color = NexusColors.TextSecondary, style = MaterialTheme.typography.bodySmall) }
+                    }
                 }
             }
         }

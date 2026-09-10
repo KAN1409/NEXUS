@@ -37,7 +37,8 @@ class CaptureViewModel @Inject constructor(
                 text,
                 "NEXUS",
             )
-            _state.update { it.copy(message = "Saved to NEXUS") }
+            repository.rebuildUnderstanding()
+            _state.update { it.copy(message = "Saved and understood") }
         }
     }
 
@@ -45,7 +46,8 @@ class CaptureViewModel @Inject constructor(
         viewModelScope.launch {
             _state.update { it.copy(busy = true) }
             val count = shareIngestor.ingest(intent)
-            _state.update { it.copy(busy = false, message = if (count > 0) "Captured $count item${if (count == 1) "" else "s"}" else null) }
+            if (count > 0) repository.rebuildUnderstanding()
+            _state.update { it.copy(busy = false, message = if (count > 0) "Captured and understood $count item${if (count == 1) "" else "s"}" else null) }
         }
     }
 
@@ -55,7 +57,8 @@ class CaptureViewModel @Inject constructor(
         viewModelScope.launch {
             _state.update { it.copy(busy = true) }
             val count = usageReader.captureLast24Hours()
-            _state.update { it.copy(busy = false, usageAccess = usageReader.hasAccess(), message = if (count > 0) "Learned from $count apps" else "Usage access is required") }
+            if (count > 0) repository.rebuildUnderstanding()
+            _state.update { it.copy(busy = false, usageAccess = usageReader.hasAccess(), message = if (count > 0) "Understood $count apps" else "Usage access is required") }
         }
     }
 }

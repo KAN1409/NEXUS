@@ -15,5 +15,6 @@ interface NexusRepository {
     fun observationCount(): Flow<Int>
     fun interestCount(): Flow<Int>
     suspend fun captureObservation(type: ObservationType, rawText: String, source: String?, metadataJson: String = "{}")
+    suspend fun rebuildUnderstanding()
     suspend fun seedFirstRun()
 }

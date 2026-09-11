@@ -1,5 +1,6 @@
 package com.kareem.nexus.domain.repository
 
+import com.kareem.nexus.core.model.ActionEvent
 import com.kareem.nexus.core.model.Discovery
 import com.kareem.nexus.core.model.Interest
 import com.kareem.nexus.core.model.Observation
@@ -13,6 +14,7 @@ interface NexusRepository {
     fun discoveries(): Flow<List<Discovery>>
     fun readyActions(): Flow<List<PreparedAction>>
     fun actions(): Flow<List<PreparedAction>>
+    fun actionEvents(): Flow<List<ActionEvent>>
     fun observationCount(): Flow<Int>
     fun interestCount(): Flow<Int>
     suspend fun captureObservation(type: ObservationType, rawText: String, source: String?, metadataJson: String = "{}")

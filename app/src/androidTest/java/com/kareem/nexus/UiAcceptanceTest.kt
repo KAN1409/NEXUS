@@ -20,6 +20,8 @@ class UiAcceptanceTest {
         descriptor.close()
     }
 
+    private fun navItem(label: String) = hasAnyDescendant(hasText(label)) and hasClickAction()
+
     private fun add(text: String) {
         compose.onNodeWithText("Add", useUnmergedTree = true).performClick()
         compose.onNode(hasSetTextAction()).performTextInput(text)
@@ -29,7 +31,9 @@ class UiAcceptanceTest {
         }
         compose.onNode(hasText("Save") and isEnabled(), useUnmergedTree = true).performClick()
 
-        val forYouNav = hasText("For You") and hasClickAction()
+        // NavigationBarItem exposes click semantics on its parent while the text lives in a child.
+        // Target the clickable ancestor so the test is stable across Compose semantics merging/IME state.
+        val forYouNav = navItem("For You")
         compose.waitUntil(15_000) {
             compose.onAllNodes(forYouNav, useUnmergedTree = true).fetchSemanticsNodes().isNotEmpty()
         }
@@ -52,7 +56,7 @@ class UiAcceptanceTest {
         compose.onNodeWithText("CIB payment", substring = true, useUnmergedTree = true).assertExists()
         screenshot("01-home-value")
 
-        compose.onNodeWithText("Memory", useUnmergedTree = true).performClick()
+        compose.onNode(navItem("Memory"), useUnmergedTree = true).performClick()
         compose.onNode(hasSetTextAction()).performTextInput("الحاجة اللي كان فيها 5672 جنيه")
         compose.waitUntil(15_000) {
             compose.onAllNodesWithText("CIB — payment of 5672 EGP is due today", useUnmergedTree = true)
@@ -65,17 +69,17 @@ class UiAcceptanceTest {
         screenshot("03-evidence")
         compose.activityRule.scenario.recreate()
 
-        compose.onNodeWithText("Situations", useUnmergedTree = true).performClick()
+        compose.onNode(navItem("Situations"), useUnmergedTree = true).performClick()
         compose.waitUntil(15_000) {
             compose.onAllNodesWithText("CIB", substring = true, useUnmergedTree = true).fetchSemanticsNodes().isNotEmpty()
         }
         screenshot("04-situations")
 
-        compose.onNodeWithText("Activity", useUnmergedTree = true).performClick()
+        compose.onNode(navItem("Activity"), useUnmergedTree = true).performClick()
         compose.onNodeWithText("Outcome timeline", useUnmergedTree = true).assertExists()
         screenshot("05-activity")
 
-        compose.onNodeWithText("Settings", useUnmergedTree = true).performClick()
+        compose.onNode(navItem("Settings"), useUnmergedTree = true).performClick()
         compose.onNodeWithText("Open loops", useUnmergedTree = true).assertExists()
         compose.onNodeWithText("3.0.0 · 300", useUnmergedTree = true).assertExists()
         screenshot("06-settings")

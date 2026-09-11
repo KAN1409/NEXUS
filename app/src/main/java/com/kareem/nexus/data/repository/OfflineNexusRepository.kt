@@ -29,6 +29,10 @@ class OfflineNexusRepository @Inject constructor(
         rows.map { PreparedAction(it.id, it.title, it.description, ActionState.valueOf(it.state), it.createdAt) }
     }
 
+    override fun actions(): Flow<List<PreparedAction>> = dao.observeAllActions().map { rows ->
+        rows.map { PreparedAction(it.id, it.title, it.description, ActionState.valueOf(it.state), it.createdAt) }
+    }
+
     override fun observationCount(): Flow<Int> = dao.observeObservationCount()
     override fun interestCount(): Flow<Int> = dao.observeInterestCount()
 

@@ -1,10 +1,10 @@
 package com.kareem.nexus
 
-import android.graphics.Bitmap
+import android.os.ParcelFileDescriptor
 import androidx.compose.ui.test.*
 import androidx.compose.ui.test.junit4.createAndroidComposeRule
 import androidx.test.platform.app.InstrumentationRegistry
-import java.io.File
+import java.io.FileInputStream
 import org.junit.Rule
 import org.junit.Test
 
@@ -14,9 +14,12 @@ class UiAcceptanceTest {
     private fun screenshot(name: String) {
         compose.waitForIdle()
         val instrumentation = InstrumentationRegistry.getInstrumentation()
-        val bitmap = instrumentation.uiAutomation.takeScreenshot()
-        val dir = File(instrumentation.targetContext.getExternalFilesDir(null), "screenshots").apply { mkdirs() }
-        File(dir, "$name.png").outputStream().use { bitmap.compress(Bitmap.CompressFormat.PNG, 100, it) }
+        val command = "mkdir -p /sdcard/Download/NEXUS-test-screenshots && screencap -p /sdcard/Download/NEXUS-test-screenshots/$name.png"
+        val descriptor: ParcelFileDescriptor = instrumentation.uiAutomation.executeShellCommand(command)
+        FileInputStream(descriptor.fileDescriptor).use { stream ->
+            while (stream.read() != -1) Unit
+        }
+        descriptor.close()
     }
 
     @Test

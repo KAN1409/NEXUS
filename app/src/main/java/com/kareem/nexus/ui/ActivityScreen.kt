@@ -135,9 +135,26 @@ fun ActivityScreen(
                 }
                 items(legacyActions, key = { it.id }) { action ->
                     val observation = state.observations.firstOrNull { action.id.endsWith(it.id) }
-                    NexusCard(accent = if (filter == "Finished") NexusColors.Mint else NexusColors.Amber) {
+                    val latestSignal = activity.events
+                        .asSequence()
+                        .filter { it.actionId == action.id }
+                        .maxByOrNull { it.createdAt }
+                        ?.signal
+                    val outcomeLabel = when (latestSignal) {
+                        FeedbackSignal.RESOLVED -> "RESOLVED"
+                        FeedbackSignal.REJECTED -> "DISMISSED"
+                        FeedbackSignal.COMPLETED -> "COMPLETED"
+                        FeedbackSignal.FAILED -> "FAILED"
+                        else -> action.state.name.replace('_', ' ')
+                    }
+                    val outcomeAccent = when (latestSignal) {
+                        FeedbackSignal.RESOLVED, FeedbackSignal.COMPLETED -> NexusColors.Mint
+                        FeedbackSignal.REJECTED, FeedbackSignal.FAILED -> NexusColors.Rose
+                        else -> if (filter == "Finished") NexusColors.Mint else NexusColors.Amber
+                    }
+                    NexusCard(accent = outcomeAccent) {
                         Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
-                            NexusStatusPill(action.state.name.replace('_', ' '), if (filter == "Finished") NexusColors.Mint else NexusColors.Amber)
+                            NexusStatusPill(outcomeLabel, outcomeAccent)
                             Text(timestamp(action.createdAt), color = NexusColors.TextMuted, style = MaterialTheme.typography.labelSmall)
                         }
                         Text(action.title, style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold)

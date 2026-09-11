@@ -35,7 +35,8 @@ jobs:
           disable-animations: true
           script: |
             gradle :app:connectedDebugAndroidTest --stacktrace
-            adb pull /sdcard/Android/data/com.kareem.nexus/files/screenshots screenshots
+            mkdir -p screenshots
+            adb pull /sdcard/Download/NEXUS-test-screenshots/. screenshots/
       - name: Upload validation APK
         uses: actions/upload-artifact@v4
         with:

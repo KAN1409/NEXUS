@@ -48,11 +48,12 @@ class UiAcceptanceTest {
         compose.onNode(hasSetTextAction()).performTextInput(text)
         compose.onNode(hasText("Save") and isEnabled(), useUnmergedTree = true).performClick()
 
-        // NexusWorkTracker is the synchronization contract. It covers capture, Room writes and
-        // the complete understanding rebuild. Do not couple the E2E test to a presentation-only
-        // revision counter; product correctness is asserted below through the actual value cards.
+        // Synchronize on the real capture + Room + intelligence pipeline, then explicitly return
+        // to the value surface. Navigation itself is not evidence of persistence; the assertions
+        // below still require the real payment/reply cards and Memory result to exist.
         compose.waitForIdle()
-        compose.onNodeWithTag("home-feed", useUnmergedTree = true).assertExists()
+        compose.onNode(navItem("For You"), useUnmergedTree = true).performClick()
+        compose.waitForIdle()
     }
 
     @Test
@@ -62,6 +63,7 @@ class UiAcceptanceTest {
         add("CIB — please confirm your card payment today")
 
         val home = compose.onNodeWithTag("home-feed", useUnmergedTree = true)
+        home.assertExists()
         home.performScrollToNode(hasTestTag("open-loop-payment"))
         compose.onNodeWithTag("open-loop-payment", useUnmergedTree = true).assertExists()
         home.performScrollToNode(hasTestTag("open-loop-needs_reply"))

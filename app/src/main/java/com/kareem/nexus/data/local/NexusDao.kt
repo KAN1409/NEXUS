@@ -41,6 +41,15 @@ interface NexusDao {
     @Query("DELETE FROM actions WHERE state IN ('DRAFT','READY_FOR_APPROVAL')")
     suspend fun clearGeneratedActions()
 
+    @Query("SELECT * FROM actions WHERE id = :id LIMIT 1")
+    suspend fun actionById(id: String): ActionEntity?
+
+    @Query("UPDATE actions SET state = :state, updatedAt = :updatedAt WHERE id = :id")
+    suspend fun updateActionState(id: String, state: String, updatedAt: Long)
+
+    @Query("UPDATE actions SET state = 'DRAFT', updatedAt = :updatedAt WHERE id = :id")
+    suspend fun deferAction(id: String, updatedAt: Long)
+
     @Query("SELECT COUNT(*) FROM observations")
     fun observeObservationCount(): Flow<Int>
 

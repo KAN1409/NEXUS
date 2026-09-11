@@ -6,8 +6,9 @@
 - Package: `com.kareem.nexus`
 - Version: `3.0.0` (`300`)
 - Room schema: `3`
-- Release status: **candidate only** until CI and real-device acceptance pass.
-- `main` must remain untouched until acceptance.
+- Release status: **final candidate under full Android acceptance**.
+- Fast gate: unit tests + debug APK + Android test compilation pass on the current architecture.
+- `main` must remain untouched until full CI and real-device acceptance pass.
 
 ## Product contract
 
@@ -27,12 +28,14 @@ Primary pipeline:
 - Requests, payments, appointments, delivery updates, failures and follow-ups can become persistent open loops.
 - Open loops have `OPEN`, `WAITING`, `SNOOZED`, `RESOLVED` and `DISMISSED` states that survive intelligence rebuilds.
 - Home is now `Needs you`, `Waiting on`, `Upcoming`, `Changed` and an intentional all-clear state. Theme percentages are no longer a primary product surface.
+- Home surfaces real-world situations instead of duplicate raw signals, with topic-aware separation so unrelated issues from the same organization are not collapsed together.
 - Situations show current state, what changed, evidence count, open-loop count and next step.
 - Real Android actions include opening the source app, calendar insertion, dialer, navigation, copy and available tracking links.
 - Reminders are scheduled locally through WorkManager and surface through a NEXUS notification channel.
 - Activity records real action execution outcomes as well as NEXUS lifecycle events.
 - Memory search handles Arabic/English concepts, typo tolerance, vague filler language, Arabic digits and remembered numeric anchors such as an amount.
 - Captured evidence is backfilled into the existing local Memory/Entity tables during intelligence rebuild.
+- Capture/intelligence work exposes deterministic completion semantics for acceptance testing rather than relying on arbitrary UI delays.
 - Optional Gemini Nano remains an enhancement. The deterministic local engine is always the fallback.
 
 ## Intentional limitations / truthful boundaries

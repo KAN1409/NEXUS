@@ -103,6 +103,8 @@ class UiAcceptanceTest {
 
         compose.onNode(navItem("Settings"), useUnmergedTree = true).performClick()
         compose.onNodeWithText("Open loops", useUnmergedTree = true).assertExists()
+        compose.onNode(hasScrollAction(), useUnmergedTree = true)
+            .performScrollToNode(hasText("3.0.0 · 300"))
         compose.onNodeWithText("3.0.0 · 300", useUnmergedTree = true).assertExists()
         screenshot("06-settings")
     }

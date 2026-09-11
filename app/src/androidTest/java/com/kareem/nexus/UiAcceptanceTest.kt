@@ -54,15 +54,19 @@ class UiAcceptanceTest {
 
     @Test
     fun valueFirstPaymentRecallSituationsAndHistory() {
-        // Multi-signal grouping and three-open-loop correctness are covered independently by
-        // RepositoryRegressionTest + HomeSurfacePolicyTest. This E2E gate owns the Android/UI
-        // contract: real capture -> real intelligence -> Home -> vague Arabic recall -> evidence
-        // -> Situations -> Activity -> Settings, without conflating every domain rule into one test.
+        // Domain correctness (three raw open loops + situation-aware Home deduplication) is covered
+        // independently by RepositoryRegressionTest and HomeSurfacePolicyTest. This test verifies
+        // the real Android path from capture through Room/Flow propagation into every major screen.
         add("CIB — payment of 5672 EGP is due today")
 
-        val home = compose.onNodeWithTag("home-feed", useUnmergedTree = true)
-        home.assertExists()
-        home.performScrollToNode(hasTestTag("open-loop-payment"))
+        compose.onNodeWithTag("home-feed", useUnmergedTree = true).assertExists()
+        // Room invalidation and Flow delivery happen after the capture transaction commits, so the
+        // pipeline can be idle a few frames before Home receives the new projection. Wait on the
+        // stable semantic identity of the value card rather than an arbitrary delay or list index.
+        compose.waitUntil(15_000) {
+            compose.onAllNodesWithTag("open-loop-payment", useUnmergedTree = true)
+                .fetchSemanticsNodes().isNotEmpty()
+        }
         compose.onNodeWithTag("open-loop-payment", useUnmergedTree = true).assertExists()
         compose.onNodeWithText("5672", substring = true, useUnmergedTree = true).assertExists()
         screenshot("01-home-value")
@@ -79,6 +83,7 @@ class UiAcceptanceTest {
         compose.onNodeWithText("Copy text", useUnmergedTree = true).assertExists()
         screenshot("03-evidence")
         compose.activityRule.scenario.recreate()
+        compose.waitForIdle()
 
         compose.onNode(navItem("Situations"), useUnmergedTree = true).performClick()
         compose.waitUntil(15_000) {

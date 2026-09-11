@@ -61,6 +61,29 @@ class OnDeviceAi @Inject constructor() {
     }
 
     /**
+     * Expands how the user remembers something into a few nearby Arabic/English concepts.
+     * This is only an optional second pass; literal/fuzzy search always remains available.
+     */
+    suspend fun expandSearchQuery(query: String): List<String> {
+        val clean = query.trim()
+        if (clean.length < 4) return emptyList()
+        val output = generate(
+            "You are a private on-device search helper. Expand this memory search query into up to 8 short " +
+                "alternative phrases or keywords that could describe the same thing. Include useful Arabic and English " +
+                "equivalents when relevant. Do not answer the query. Do not add facts. Return one phrase per line, " +
+                "no numbering and no explanation. Query: $clean"
+        ) ?: return emptyList()
+
+        return output.lineSequence()
+            .map { it.trim().trimStart('-', '•', '*').trim() }
+            .filter { it.length in 2..80 }
+            .filterNot { it.equals(clean, ignoreCase = true) }
+            .distinctBy(ContextIntelligence::normalize)
+            .take(8)
+            .toList()
+    }
+
+    /**
      * Uses Nano's multimodal Prompt API as a second OCR/context pass. This is intentionally only
      * used for user-selected images and only when the system model is already available.
      */

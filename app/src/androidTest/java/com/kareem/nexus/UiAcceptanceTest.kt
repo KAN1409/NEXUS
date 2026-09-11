@@ -45,10 +45,10 @@ class UiAcceptanceTest {
         add("CIB — payment of 5672 EGP is due today")
         add("CIB — please confirm your card payment today")
 
-        // Synchronize on the value model itself. The header is always composed, unlike offscreen
-        // LazyColumn cards, so this proves all three open loops reached Home before we inspect them.
+        // Three raw open loops exist, but the two related CIB signals belong to one situation.
+        // Home must surface two real-world things rather than making the user process duplicates.
         compose.waitUntil(20_000) {
-            compose.onAllNodesWithText("3 things need you.", useUnmergedTree = true)
+            compose.onAllNodesWithText("2 things need you.", useUnmergedTree = true)
                 .fetchSemanticsNodes().isNotEmpty()
         }
         compose.onNodeWithText("Needs you", useUnmergedTree = true).assertExists()
@@ -58,7 +58,7 @@ class UiAcceptanceTest {
         compose.waitForIdle()
         compose.onNodeWithText("CIB payment", substring = true, useUnmergedTree = true).assertExists()
 
-        compose.onNode(homeList, useUnmergedTree = true).performScrollToIndex(4)
+        compose.onNode(homeList, useUnmergedTree = true).performScrollToIndex(3)
         compose.waitForIdle()
         compose.onNodeWithText("Ahmed needs a reply", substring = true, useUnmergedTree = true).assertExists()
         screenshot("01-home-value")

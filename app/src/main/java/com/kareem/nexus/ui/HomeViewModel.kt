@@ -4,6 +4,7 @@ import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.kareem.nexus.core.model.*
 import com.kareem.nexus.domain.intelligence.ContextIntelligence
+import com.kareem.nexus.domain.intelligence.HomeSurfacePolicy
 import com.kareem.nexus.domain.intelligence.PersonalIntelligenceEngine
 import com.kareem.nexus.domain.repository.NexusRepository
 import dagger.hilt.android.lifecycle.HiltViewModel
@@ -96,33 +97,7 @@ class HomeViewModel @Inject constructor(
             }
         }
 
-        val activeLoops = unifiedState.loops
-            .filter { it.state in setOf(OpenLoopState.OPEN, OpenLoopState.WAITING) }
-            .sortedWith(compareByDescending<OpenLoop> { it.priority }.thenBy { it.dueAt ?: Long.MAX_VALUE })
-
-        // A burst of related evidence is one real-world situation, not several things for the user
-        // to deal with. Keep every loop in persistence/history, but surface only the strongest loop
-        // from each connected situation on Home. Standalone loops remain independent.
-        val surfacedLoops = activeLoops
-            .groupBy { it.situationId ?: it.id }
-            .values
-            .mapNotNull { group ->
-                group.maxWithOrNull(
-                    compareBy<OpenLoop> { it.priority }
-                        .thenByDescending { it.updatedAt }
-                )
-            }
-            .sortedWith(compareByDescending<OpenLoop> { it.priority }.thenBy { it.dueAt ?: Long.MAX_VALUE })
-
-        val needsYou = surfacedLoops.filter {
-            it.kind !in setOf(OpenLoopKind.WAITING_ON, OpenLoopKind.DELIVERY, OpenLoopKind.UPCOMING)
-        }.take(5)
-        val waitingOn = surfacedLoops.filter {
-            it.kind in setOf(OpenLoopKind.WAITING_ON, OpenLoopKind.DELIVERY)
-        }.take(5)
-        val upcoming = surfacedLoops.filter { it.kind == OpenLoopKind.UPCOMING }
-            .sortedBy { it.dueAt ?: Long.MAX_VALUE }
-            .take(5)
+        val surface = HomeSurfacePolicy.build(unifiedState.loops)
 
         val attention = ContextIntelligence.buildAttention(ContextIntelligence.unresolved(observations, visibleActions))
         val legacySituations = ContextIntelligence.buildSituations(observations)
@@ -140,7 +115,7 @@ class HomeViewModel @Inject constructor(
             interests = legacyState.interests,
             discoveries = legacyState.discoveries,
             actions = visibleActions,
-            readyActionCount = surfacedLoops.size,
+            readyActionCount = surface.surfaced.size,
             attention = attention,
             situations = legacySituations,
             topOfMind = topOfMind,
@@ -148,9 +123,9 @@ class HomeViewModel @Inject constructor(
             brief = ContextIntelligence.buildDailyBrief(observations, legacyState.interests, attention),
             insights = ContextIntelligence.buildInsights(observations, legacyState.interests, legacySituations),
             openLoops = unifiedState.loops,
-            needsYou = needsYou,
-            waitingOn = waitingOn,
-            upcoming = upcoming,
+            needsYou = surface.needsYou,
+            waitingOn = surface.waitingOn,
+            upcoming = surface.upcoming,
             situationBriefs = unifiedState.briefs,
             recentChanges = recentChanges,
         )

@@ -4,12 +4,33 @@ import android.os.ParcelFileDescriptor
 import androidx.compose.ui.test.*
 import androidx.compose.ui.test.junit4.v2.createAndroidComposeRule
 import androidx.test.platform.app.InstrumentationRegistry
+import com.kareem.nexus.core.NexusWorkTracker
 import java.io.FileInputStream
+import org.junit.After
+import org.junit.Before
 import org.junit.Rule
 import org.junit.Test
 
 class UiAcceptanceTest {
     @get:Rule val compose = createAndroidComposeRule<MainActivity>()
+
+    private val pipelineIdle = object : IdlingResource {
+        override val isIdleNow: Boolean
+            get() = NexusWorkTracker.isIdle()
+
+        override fun getDiagnosticMessageIfBusy(): String? =
+            NexusWorkTracker.pendingCount().takeIf { it > 0 }?.let { "NEXUS background operations pending: $it" }
+    }
+
+    @Before
+    fun registerPipelineIdle() {
+        check(compose.registerIdlingResource(pipelineIdle)) { "Compose idling resources are unavailable" }
+    }
+
+    @After
+    fun unregisterPipelineIdle() {
+        compose.unregisterIdlingResource(pipelineIdle)
+    }
 
     private fun screenshot(name: String) {
         compose.waitForIdle()
@@ -27,10 +48,10 @@ class UiAcceptanceTest {
         compose.onNode(hasSetTextAction()).performTextInput(text)
         compose.onNode(hasText("Save") and isEnabled(), useUnmergedTree = true).performClick()
 
-        compose.waitUntil(30_000) {
-            compose.onAllNodesWithTag("nexus-pipeline-ready-$expectedRevision", useUnmergedTree = true)
-                .fetchSemanticsNodes().isNotEmpty()
-        }
+        // The registered IdlingResource covers capture + Room writes + understanding rebuild.
+        // waitForIdle then flushes the resulting Compose state before we inspect semantics.
+        compose.waitForIdle()
+        compose.onNodeWithTag("nexus-pipeline-ready-$expectedRevision", useUnmergedTree = true).assertExists()
 
         compose.onNode(navItem("For You"), useUnmergedTree = true).performClick()
         compose.waitForIdle()

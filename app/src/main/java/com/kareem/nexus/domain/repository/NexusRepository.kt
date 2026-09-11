@@ -12,6 +12,7 @@ interface NexusRepository {
     fun interests(): Flow<List<Interest>>
     fun discoveries(): Flow<List<Discovery>>
     fun readyActions(): Flow<List<PreparedAction>>
+    fun actions(): Flow<List<PreparedAction>>
     fun observationCount(): Flow<Int>
     fun interestCount(): Flow<Int>
     suspend fun captureObservation(type: ObservationType, rawText: String, source: String?, metadataJson: String = "{}")

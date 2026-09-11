@@ -11,6 +11,8 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.unit.dp
 import androidx.hilt.lifecycle.viewmodel.compose.hiltViewModel
+import androidx.lifecycle.Lifecycle
+import androidx.lifecycle.compose.LifecycleEventEffect
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.kareem.nexus.ui.design.*
 
@@ -24,6 +26,10 @@ fun NexusApp(viewModel: CaptureViewModel = hiltViewModel()) {
     var showCapture by rememberSaveable { mutableStateOf(false) }
     val captureState by viewModel.state.collectAsStateWithLifecycle()
     val context = LocalContext.current
+
+    LifecycleEventEffect(Lifecycle.Event.ON_RESUME) {
+        viewModel.refreshAccessState()
+    }
 
     BackHandler(enabled = showCapture || destination != NexusDestination.ForYou) {
         if (showCapture) showCapture = false else destination = NexusDestination.ForYou
@@ -94,7 +100,13 @@ private fun SettingsScreen(padding: PaddingValues, state: CaptureUiState, notifi
         Text("Settings", style = MaterialTheme.typography.headlineLarge)
         Text("Control what NEXUS is allowed to observe.", color = NexusColors.TextSecondary)
         Surface(color = NexusColors.Surface, shape = MaterialTheme.shapes.large) { Column(Modifier.fillMaxWidth().padding(18.dp)) {
-            Text("Notification observation", style = MaterialTheme.typography.titleMedium); Text("Explicit Android access. NEXUS stores captured text locally.", color = NexusColors.TextSecondary); TextButton(onClick = notificationAccess) { Text("Open notification access") }
+            Text("Notification observation", style = MaterialTheme.typography.titleMedium)
+            Text(
+                if (state.notificationAccess) "Access granted" else "Access not granted",
+                color = NexusColors.TextSecondary,
+            )
+            Text("NEXUS stores captured notification text locally.", color = NexusColors.TextSecondary)
+            TextButton(onClick = notificationAccess) { Text("Open notification access") }
         }}
         Surface(color = NexusColors.Surface, shape = MaterialTheme.shapes.large) { Column(Modifier.fillMaxWidth().padding(18.dp)) {
             Text("App usage signals", style = MaterialTheme.typography.titleMedium); Text(if (state.usageAccess) "Access granted" else "Access not granted", color = NexusColors.TextSecondary); TextButton(onClick = usageAccess) { Text("Open usage access") }; if (state.usageAccess) TextButton(onClick = captureUsage) { Text("Capture last 24 hours") }

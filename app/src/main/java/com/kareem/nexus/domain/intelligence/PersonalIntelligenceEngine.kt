@@ -101,15 +101,18 @@ object PersonalIntelligenceEngine {
         limit: Int = 5,
         now: Long = System.currentTimeMillis(),
     ): List<TopOfMindItem> {
-        val terminalObservationIds = existingActions
-            .filter { it.state in setOf(ActionState.COMPLETED, ActionState.REJECTED) }
+        val hiddenObservationIds = existingActions.asSequence()
+            .filter { action ->
+                action.id.startsWith("action_signal_") || action.id.startsWith("action_commitment_")
+            }
+            .filter { it.state != ActionState.READY_FOR_APPROVAL }
             .map { it.id.removePrefix("action_signal_").removePrefix("action_commitment_") }
             .toSet()
 
         return observations.asSequence()
             .filter { it.type != ObservationType.APP_USAGE }
             .filter { it.createdAt >= now - 7L * 24 * 60 * 60 * 1000 }
-            .filterNot { it.id in terminalObservationIds }
+            .filterNot { it.id in hiddenObservationIds }
             .map { it to interpret(it, now) }
             .filter { (_, understanding) ->
                 !understanding.isNoise &&

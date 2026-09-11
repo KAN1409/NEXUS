@@ -45,9 +45,7 @@ class OfflineNexusRepository @Inject constructor(
         }
     }
 
-    override fun openLoops(): Flow<List<OpenLoop>> = dao.observeOpenLoops().map { rows ->
-        rows.mapNotNull(::mapOpenLoop)
-    }
+    override fun openLoops(): Flow<List<OpenLoop>> = dao.observeOpenLoops().map { rows -> rows.mapNotNull(::mapOpenLoop) }
 
     override fun situationBriefs(): Flow<List<SituationBrief>> = dao.observeSituationSnapshots().map { rows ->
         rows.map { row ->
@@ -95,11 +93,7 @@ class OfflineNexusRepository @Inject constructor(
         dao.addFeedback(FeedbackEntity(UUID.randomUUID().toString(), actionId, signal.name, value, now))
     }
 
-    private suspend fun transitionAction(
-        id: String,
-        target: ActionState,
-        signal: FeedbackSignal,
-    ) = database.withTransaction {
+    private suspend fun transitionAction(id: String, target: ActionState, signal: FeedbackSignal) = database.withTransaction {
         val current = dao.actionById(id) ?: return@withTransaction
         val from = runCatching { ActionState.valueOf(current.state) }.getOrNull() ?: return@withTransaction
         if (!ActionLifecyclePolicy.canTransition(from, target)) return@withTransaction
@@ -207,7 +201,6 @@ class OfflineNexusRepository @Inject constructor(
         val digest = sha256(identity)
         val existing = dao.observationById(digest)
         if (existing != null && type != ObservationType.APP_USAGE) return@withTransaction
-
         dao.upsertObservation(
             ObservationEntity(
                 id = digest,
@@ -246,8 +239,6 @@ class OfflineNexusRepository @Inject constructor(
 
         val rows = dao.recentObservationsOnce(300)
         val observations = mapObservations(rows)
-
-        // NEXUS 3 no longer turns usage/theme percentages into a primary product surface.
         dao.clearInterests()
         dao.clearDiscoveries()
 
@@ -314,7 +305,6 @@ class OfflineNexusRepository @Inject constructor(
         }
 
         if (activeIds.isEmpty()) dao.clearActiveOpenLoops() else dao.deleteActiveOpenLoopsNotIn(activeIds)
-
         dao.clearSituationSnapshots()
         situations.forEach { situation ->
             val brief = UnifiedIntelligenceEngine.buildSituationBrief(situation, materialized, observations, now)
@@ -329,7 +319,6 @@ class OfflineNexusRepository @Inject constructor(
         dao.clearObservationUnderstandings()
         dao.clearSituationMembers()
         dao.clearSituations()
-
         observations.filter { it.type != ObservationType.APP_USAGE }.forEach { observation ->
             val understanding = PersonalIntelligenceEngine.interpret(observation, now)
             dao.upsertObservationUnderstanding(
@@ -385,7 +374,7 @@ class OfflineNexusRepository @Inject constructor(
             )
         )
         understanding.facts
-            .filter { it.kind in setOf(FactKind.PERSON, FactKind.ORGANIZATION, FactKind.PROJECT, FactKind.PLACE, FactKind.LOCATION) }
+            .filter { it.kind in setOf(FactKind.PERSON, FactKind.ORGANIZATION, FactKind.PROJECT, FactKind.LOCATION) }
             .forEach { fact ->
                 val id = "entity_${sha256("${fact.kind}:${fact.normalizedValue}").take(20)}"
                 val previous = dao.knowledgeById(id)

@@ -64,7 +64,7 @@ new_cert="$(cert_digest "$work_dir/update.apk")"
 unset NEXUS_STORE_PASSWORD NEXUS_KEY_PASSWORD
 output_dir="$HOME/NEXUS_UPDATES"
 mkdir -p "$output_dir"
-output_apk="$output_dir/NEXUS-1.0.0-signed.apk"
+output_apk="$output_dir/NEXUS-1.1.0-signed.apk"
 cp "$work_dir/update.apk" "$output_apk"
 
 adb -s "$device" install -r "$output_apk"

@@ -36,6 +36,52 @@ class OfflineNexusRepository @Inject constructor(
     override fun observationCount(): Flow<Int> = dao.observeObservationCount()
     override fun interestCount(): Flow<Int> = dao.observeInterestCount()
 
+    private suspend fun transitionAction(id: String, state: ActionState, feedback: FeedbackSignal? = null) {
+        val current = dao.actionById(id) ?: return
+        val now = System.currentTimeMillis()
+        dao.updateActionState(id, state.name, now)
+        if (feedback != null) {
+            dao.addFeedback(
+                FeedbackEntity(
+                    id = "feedback_$id_${feedback.name}_$now",
+                    targetId = id,
+                    signal = feedback.name,
+                    value = 1.0,
+                    createdAt = now,
+                )
+            )
+        }
+    }
+
+    override suspend fun approveAction(id: String) =
+        transitionAction(id, ActionState.APPROVED, FeedbackSignal.ACTED)
+
+    override suspend fun deferAction(id: String) {
+        val now = System.currentTimeMillis()
+        dao.deferAction(id, now)
+        dao.addFeedback(
+            FeedbackEntity(
+                id = "feedback_$id_deferred_$now",
+                targetId = id,
+                signal = FeedbackSignal.SAVED.name,
+                value = 0.5,
+                createdAt = now,
+            )
+        )
+    }
+
+    override suspend fun rejectAction(id: String) =
+        transitionAction(id, ActionState.REJECTED, FeedbackSignal.REJECTED)
+
+    override suspend fun startAction(id: String) =
+        transitionAction(id, ActionState.EXECUTING)
+
+    override suspend fun completeAction(id: String) =
+        transitionAction(id, ActionState.COMPLETED)
+
+    override suspend fun failAction(id: String) =
+        transitionAction(id, ActionState.FAILED)
+
     override suspend fun captureObservation(type: ObservationType, rawText: String, source: String?, metadataJson: String) {
         val clean = rawText.trim().replace(Regex("\\s+"), " ")
         if (clean.isBlank()) return

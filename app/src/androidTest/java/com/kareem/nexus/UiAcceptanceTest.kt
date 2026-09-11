@@ -40,7 +40,7 @@ class UiAcceptanceTest {
         screenshot("01-home")
 
         compose.onNodeWithText("Memory", useUnmergedTree = true).performClick()
-        compose.onNodeWithText("Search saved context").performTextInput("احمد")
+        compose.onNodeWithText("Search memory").performTextInput("احمد")
         compose.waitUntil(15_000) {
             compose.onAllNodesWithText("موعد أحمد بكرة — Please confirm meeting", useUnmergedTree = true)
                 .fetchSemanticsNodes().isNotEmpty()

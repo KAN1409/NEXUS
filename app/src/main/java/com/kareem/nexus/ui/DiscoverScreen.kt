@@ -33,29 +33,18 @@ fun DiscoverScreen(
         item {
             Text("Discover", style = MaterialTheme.typography.headlineLarge, fontWeight = FontWeight.Bold)
             Text(
-                "Patterns NEXUS found in your recent context.",
+                "Connections, patterns and changes NEXUS found in your context.",
                 color = NexusColors.TextSecondary,
                 style = MaterialTheme.typography.titleMedium,
             )
             Spacer(Modifier.height(10.dp))
         }
 
-        if (state.discoveries.isEmpty()) {
+        if (state.situations.isNotEmpty()) {
             item {
-                Surface(
-                    modifier = Modifier.fillMaxWidth(),
-                    color = NexusColors.Surface,
-                    shape = MaterialTheme.shapes.large,
-                ) {
-                    Text(
-                        "Capture usage, share something, or add a note. NEXUS will turn repeated signals into patterns here.",
-                        modifier = Modifier.padding(20.dp),
-                        color = NexusColors.TextSecondary,
-                    )
-                }
+                Text("Connected situations", style = MaterialTheme.typography.headlineSmall, fontWeight = FontWeight.Bold)
             }
-        } else {
-            items(state.discoveries, key = { it.id }) { discovery ->
+            items(state.situations, key = { "discover_" + it.id }) { situation ->
                 Surface(
                     modifier = Modifier.fillMaxWidth(),
                     color = NexusColors.Surface,
@@ -65,12 +54,55 @@ fun DiscoverScreen(
                         Modifier.fillMaxWidth().padding(18.dp),
                         verticalArrangement = Arrangement.spacedBy(8.dp),
                     ) {
-                        Text("PATTERN", color = NexusColors.Violet, style = MaterialTheme.typography.labelLarge)
-                        Text(discovery.title, style = MaterialTheme.typography.titleLarge, fontWeight = FontWeight.Bold)
-                        Text(discovery.summary, color = NexusColors.TextSecondary)
-                        HorizontalDivider()
-                        Text("Why this: ${discovery.whyThis}", color = NexusColors.TextSecondary, style = MaterialTheme.typography.bodySmall)
+                        Text(situation.kind.name.replace('_', ' '), color = NexusColors.Cyan, style = MaterialTheme.typography.labelLarge)
+                        Text(situation.title, style = MaterialTheme.typography.titleLarge, fontWeight = FontWeight.Bold)
+                        Text(situation.summary, color = NexusColors.TextSecondary)
+                        Text(
+                            situation.observationIds.size.toString() + " signals connected",
+                            color = NexusColors.Violet,
+                            style = MaterialTheme.typography.bodySmall,
+                        )
                     }
+                }
+            }
+        }
+
+        if (state.insights.isNotEmpty()) {
+            item {
+                Text("Insights", style = MaterialTheme.typography.headlineSmall, fontWeight = FontWeight.Bold)
+            }
+            items(state.insights, key = { "insight_" + it.id }) { insight ->
+                Surface(
+                    modifier = Modifier.fillMaxWidth(),
+                    color = NexusColors.Surface,
+                    shape = MaterialTheme.shapes.large,
+                ) {
+                    Column(
+                        Modifier.fillMaxWidth().padding(18.dp),
+                        verticalArrangement = Arrangement.spacedBy(8.dp),
+                    ) {
+                        Text("INSIGHT", color = NexusColors.Violet, style = MaterialTheme.typography.labelLarge)
+                        Text(insight.title, style = MaterialTheme.typography.titleLarge, fontWeight = FontWeight.Bold)
+                        Text(insight.summary, color = NexusColors.TextSecondary)
+                        HorizontalDivider()
+                        Text(insight.evidence, color = NexusColors.TextSecondary, style = MaterialTheme.typography.bodySmall)
+                    }
+                }
+            }
+        }
+
+        if (state.situations.isEmpty() && state.insights.isEmpty()) {
+            item {
+                Surface(
+                    modifier = Modifier.fillMaxWidth(),
+                    color = NexusColors.Surface,
+                    shape = MaterialTheme.shapes.large,
+                ) {
+                    Text(
+                        "NEXUS needs a little more context before it can connect meaningful situations.",
+                        modifier = Modifier.padding(20.dp),
+                        color = NexusColors.TextSecondary,
+                    )
                 }
             }
         }

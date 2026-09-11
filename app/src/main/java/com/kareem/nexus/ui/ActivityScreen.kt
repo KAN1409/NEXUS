@@ -30,7 +30,17 @@ fun ActivityScreen(
 
     val rows = buildList {
         state.actions.forEach {
-            add(ActivityRow("a_${it.id}", it.title, it.description, "ACTION SUGGESTED", it.createdAt))
+            val kind = when (it.state.name) {
+                "READY_FOR_APPROVAL" -> "WAITING FOR APPROVAL"
+                "APPROVED" -> "ACTION APPROVED"
+                "EXECUTING" -> "ACTION IN PROGRESS"
+                "COMPLETED" -> "ACTION COMPLETED"
+                "REJECTED" -> "ACTION DISMISSED"
+                "FAILED" -> "ACTION FAILED"
+                "DRAFT" -> "ACTION SAVED FOR LATER"
+                else -> it.state.name.replace('_', ' ')
+            }
+            add(ActivityRow("a_${it.id}", it.title, it.description, kind, it.createdAt))
         }
         state.discoveries.forEach {
             add(ActivityRow("d_${it.id}", it.title, it.summary, "PATTERN DETECTED", it.createdAt))

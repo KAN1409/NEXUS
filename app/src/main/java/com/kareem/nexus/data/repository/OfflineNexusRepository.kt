@@ -6,6 +6,12 @@ import com.kareem.nexus.domain.action.ActionLifecyclePolicy
 import com.kareem.nexus.domain.intelligence.ContextIntelligence
 import com.kareem.nexus.domain.repository.NexusRepository
 import java.security.MessageDigest
+import java.util.UUID
+import java.util.Locale
+import androidx.room.withTransaction
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.withContext
+import org.json.JSONObject
 import javax.inject.Inject
 import javax.inject.Singleton
 import kotlinx.coroutines.flow.Flow
@@ -14,7 +20,12 @@ import kotlinx.coroutines.flow.map
 @Singleton
 class OfflineNexusRepository @Inject constructor(
     private val dao: NexusDao,
+    private val database: NexusDatabase,
 ) : NexusRepository {
+
+    override fun allObservations(): Flow<List<Observation>> = dao.observeAllObservations().map { rows ->
+        rows.map { Observation(it.id, ObservationType.valueOf(it.type), it.rawText, it.source, it.createdAt) }
+    }
 
     override fun observations(): Flow<List<Observation>> = dao.observeRecentObservations().map { rows ->
         rows.map { Observation(it.id, ObservationType.valueOf(it.type), it.rawText, it.source, it.createdAt) }
@@ -60,7 +71,7 @@ class OfflineNexusRepository @Inject constructor(
     ) {
         dao.addFeedback(
             FeedbackEntity(
-                id = "event_${actionId}_${signal.name}_$now",
+                id = UUID.randomUUID().toString(),
                 targetId = actionId,
                 signal = signal.name,
                 value = value,
@@ -73,10 +84,10 @@ class OfflineNexusRepository @Inject constructor(
         id: String,
         target: ActionState,
         signal: FeedbackSignal,
-    ) {
-        val current = dao.actionById(id) ?: return
-        val from = runCatching { ActionState.valueOf(current.state) }.getOrNull() ?: return
-        if (!ActionLifecyclePolicy.canTransition(from, target)) return
+    ) = database.withTransaction {
+        val current = dao.actionById(id) ?: return@withTransaction
+        val from = runCatching { ActionState.valueOf(current.state) }.getOrNull() ?: return@withTransaction
+        if (!ActionLifecyclePolicy.canTransition(from, target)) return@withTransaction
 
         val now = System.currentTimeMillis()
         dao.updateActionState(id, target.name, now)
@@ -86,10 +97,10 @@ class OfflineNexusRepository @Inject constructor(
     override suspend fun approveAction(id: String) =
         transitionAction(id, ActionState.APPROVED, FeedbackSignal.APPROVED)
 
-    override suspend fun deferAction(id: String) {
-        val current = dao.actionById(id) ?: return
-        val from = runCatching { ActionState.valueOf(current.state) }.getOrNull() ?: return
-        if (!ActionLifecyclePolicy.canTransition(from, ActionState.DRAFT)) return
+    override suspend fun deferAction(id: String) = database.withTransaction {
+        val current = dao.actionById(id) ?: return@withTransaction
+        val from = runCatching { ActionState.valueOf(current.state) }.getOrNull() ?: return@withTransaction
+        if (!ActionLifecyclePolicy.canTransition(from, ActionState.DRAFT)) return@withTransaction
 
         val now = System.currentTimeMillis()
         dao.deferAction(id, now)
@@ -113,9 +124,9 @@ class OfflineNexusRepository @Inject constructor(
         rawText: String,
         source: String?,
         metadataJson: String,
-    ) {
+    ) = database.withTransaction {
         val clean = rawText.trim().replace(Regex("\\s+"), " ")
-        if (clean.isBlank()) return
+        if (clean.isBlank()) return@withTransaction
 
         val identity = if (type == ObservationType.APP_USAGE) {
             "${type.name}|${source.orEmpty()}"
@@ -127,12 +138,15 @@ class OfflineNexusRepository @Inject constructor(
             .digest(identity.toByteArray())
             .joinToString("") { "%02x".format(it) }
 
+        // Repeated callbacks must not rewrite first-seen time or resurface old decisions.
+        val existing = dao.observationById(digest)
+        if (existing != null && type != ObservationType.APP_USAGE) return@withTransaction
         dao.upsertObservation(
             ObservationEntity(
                 id = digest,
                 type = type.name,
                 rawText = rawText.trim(),
-                normalizedText = clean.lowercase(),
+                normalizedText = ContextIntelligence.normalize(clean),
                 source = source,
                 metadataJson = metadataJson,
                 createdAt = System.currentTimeMillis(),
@@ -148,7 +162,11 @@ class OfflineNexusRepository @Inject constructor(
         if (sources.isNotEmpty()) dao.deleteUsageOutsideSources(sources)
     }
 
-    override suspend fun rebuildUnderstanding() {
+    override suspend fun rebuildUnderstanding() = withContext(Dispatchers.Default) {
+        database.withTransaction { rebuildTransaction() }
+    }
+
+    private suspend fun rebuildTransaction() {
         val now = System.currentTimeMillis()
 
         dao.removeDuplicateUsageSnapshots()
@@ -286,27 +304,27 @@ class OfflineNexusRepository @Inject constructor(
         }
 
         val actionableNotifications = rows
-            .filter { it.type == ObservationType.NOTIFICATION.name }
+            .filter { it.type in setOf(ObservationType.NOTIFICATION.name, ObservationType.MANUAL.name, ObservationType.SHARED_TEXT.name) }
+            .filter { it.createdAt >= now - 7L * 24 * 60 * 60 * 1000 }
             .mapNotNull { row ->
                 ContextIntelligence.suggestedActionFor(row.rawText)?.let { suggestion ->
                     Triple(row, suggestion.first, suggestion.second)
                 }
             }
-            .take(6)
 
         actionableNotifications.forEach { item ->
             val row = item.first
             val title = item.second
             val description = item.third
             val id = "action_signal_" + row.id
-            if (dao.actionById(id) == null) {
+            if (dao.actionById(id) == null && dao.actionById("action_commitment_" + row.id) == null) {
                 dao.upsertAction(
                     ActionEntity(
                         id = id,
                         title = title,
                         description = description,
                         state = ActionState.READY_FOR_APPROVAL.name,
-                        payloadJson = "{\"source\":\"" + row.source.orEmpty().replace("\"", "") + "\"}",
+                        payloadJson = JSONObject().put("source", row.source).put("observationId", row.id).toString(),
                         createdAt = row.createdAt,
                         updatedAt = now,
                     )

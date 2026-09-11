@@ -21,7 +21,6 @@ object DatabaseModule {
     @Singleton
     fun database(@ApplicationContext context: Context): NexusDatabase =
         Room.databaseBuilder(context, NexusDatabase::class.java, "nexus.db")
-            .fallbackToDestructiveMigrationOnDowngrade()
             .build()
 
     @Provides
@@ -34,3 +33,4 @@ abstract class RepositoryModule {
     @Binds
     abstract fun bindRepository(impl: OfflineNexusRepository): NexusRepository
 }
+

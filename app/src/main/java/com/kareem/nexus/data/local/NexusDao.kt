@@ -8,6 +8,12 @@ import kotlinx.coroutines.flow.Flow
 
 @Dao
 interface NexusDao {
+    @Query("SELECT * FROM observations WHERE id = :id")
+    suspend fun observationById(id: String): ObservationEntity?
+
+    @Query("SELECT * FROM observations ORDER BY createdAt DESC")
+    fun observeAllObservations(): Flow<List<ObservationEntity>>
+
     @Insert(onConflict = OnConflictStrategy.REPLACE)
     suspend fun upsertObservation(entity: ObservationEntity)
 
@@ -36,7 +42,7 @@ interface NexusDao {
     fun observeReadyActions(): Flow<List<ActionEntity>>
 
     @Query("SELECT * FROM actions ORDER BY createdAt DESC LIMIT :limit")
-    fun observeAllActions(limit: Int = 50): Flow<List<ActionEntity>>
+    fun observeAllActions(limit: Int = Int.MAX_VALUE): Flow<List<ActionEntity>>
 
     @Query("SELECT * FROM feedback ORDER BY createdAt DESC LIMIT :limit")
     fun observeFeedback(limit: Int = 200): Flow<List<FeedbackEntity>>

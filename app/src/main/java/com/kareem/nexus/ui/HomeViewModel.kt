@@ -7,6 +7,9 @@ import com.kareem.nexus.domain.intelligence.ContextIntelligence
 import com.kareem.nexus.domain.repository.NexusRepository
 import dagger.hilt.android.lifecycle.HiltViewModel
 import javax.inject.Inject
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.CancellationException
+import kotlinx.coroutines.flow.*
 import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.combine
@@ -14,6 +17,8 @@ import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.launch
 
 data class HomeUiState(
+    val error: String? = null,
+    val pending: Set<String> = emptySet(),
     val observationCount: Int = 0,
     val interestCount: Int = 0,
     val observations: List<Observation> = emptyList(),
@@ -38,14 +43,16 @@ class HomeViewModel @Inject constructor(
     private val repository: NexusRepository,
 ) : ViewModel() {
 
-    val uiState: StateFlow<HomeUiState> = combine(
+    private val error = MutableStateFlow<String?>(null)
+    private val pending = MutableStateFlow<Set<String>>(emptySet())
+    private val content = combine(
         repository.observationCount(),
         repository.observations(),
         repository.interests(),
         repository.discoveries(),
         repository.actions(),
     ) { observationCount, observations, interests, discoveries, actions ->
-        val attention = ContextIntelligence.buildAttention(observations)
+        val attention = ContextIntelligence.buildAttention(ContextIntelligence.unresolved(observations, actions))
         val situations = ContextIntelligence.buildSituations(observations)
         HomeUiState(
             observationCount = observationCount,
@@ -60,13 +67,30 @@ class HomeViewModel @Inject constructor(
             brief = ContextIntelligence.buildDailyBrief(observations, interests, attention),
             insights = ContextIntelligence.buildInsights(observations, interests, situations),
         )
+    }.flowOn(Dispatchers.Default).catch { cause ->
+        if (cause is CancellationException) throw cause
+        emit(HomeUiState(error = "Could not load your context. Reopen NEXUS to retry."))
+    }
+    val uiState = combine(content, error, pending) { state, message, busy ->
+        state.copy(error = message ?: state.error, pending = busy)
     }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), HomeUiState())
 
-    fun approveAction(id: String) = viewModelScope.launch { repository.approveAction(id) }
-    fun deferAction(id: String) = viewModelScope.launch { repository.deferAction(id) }
-    fun rejectAction(id: String) = viewModelScope.launch { repository.rejectAction(id) }
-    fun startAction(id: String) = viewModelScope.launch { repository.startAction(id) }
-    fun completeAction(id: String) = viewModelScope.launch { repository.completeAction(id) }
-    fun failAction(id: String) = viewModelScope.launch { repository.failAction(id) }
-    fun refreshUnderstanding() = viewModelScope.launch { repository.rebuildUnderstanding() }
+    private fun action(id: String, block: suspend () -> Unit) {
+        if (id in pending.value) return
+        pending.update { it + id }
+        viewModelScope.launch {
+            try { block(); error.value = null }
+            catch (cancel: CancellationException) { throw cancel }
+            catch (_: Exception) { error.value = "Could not save this change. Please retry." }
+            finally { pending.update { it - id } }
+        }
+    }
+
+    fun approveAction(id: String) = action(id) { repository.approveAction(id) }
+    fun deferAction(id: String) = action(id) { repository.deferAction(id) }
+    fun rejectAction(id: String) = action(id) { repository.rejectAction(id) }
+    fun startAction(id: String) = action(id) { repository.startAction(id) }
+    fun completeAction(id: String) = action(id) { repository.completeAction(id) }
+    fun failAction(id: String) = action(id) { repository.failAction(id) }
+    fun refreshUnderstanding() = action("refresh") { repository.rebuildUnderstanding() }
 }

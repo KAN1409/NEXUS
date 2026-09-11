@@ -16,7 +16,7 @@ class ContextIntelligenceTest {
             source = "com.example.mail",
             createdAt = 100L,
         )
-        val attention = ContextIntelligence.buildAttention(listOf(observation))
+        val attention = ContextIntelligence.buildAttention(listOf(observation), now = 500L)
         assertEquals(1, attention.size)
         assertEquals(AttentionKind.REQUEST, attention.first().kind)
         assertEquals(AttentionLevel.URGENT, attention.first().level)
@@ -32,7 +32,7 @@ class ContextIntelligenceTest {
             source = "com.example.calendar",
             createdAt = 200L,
         )
-        val attention = ContextIntelligence.buildAttention(listOf(observation))
+        val attention = ContextIntelligence.buildAttention(listOf(observation), now = 500L)
         assertEquals(AttentionKind.APPOINTMENT, attention.first().kind)
         assertEquals(AttentionLevel.HIGH, attention.first().level)
     }
@@ -46,7 +46,7 @@ class ContextIntelligenceTest {
             source = "com.example.wallpaper",
             createdAt = 300L,
         )
-        assertTrue(ContextIntelligence.buildAttention(listOf(observation)).isEmpty())
+        assertTrue(ContextIntelligence.buildAttention(listOf(observation), now = 500L).isEmpty())
         assertEquals(null, ContextIntelligence.suggestedActionFor(observation.rawText))
     }
 
@@ -60,3 +60,4 @@ class ContextIntelligenceTest {
         assertTrue(situations.any { it.kind == SituationKind.PROJECT })
     }
 }
+

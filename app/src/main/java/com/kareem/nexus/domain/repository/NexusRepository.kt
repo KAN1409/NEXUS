@@ -9,6 +9,7 @@ import com.kareem.nexus.core.model.PreparedAction
 import kotlinx.coroutines.flow.Flow
 
 interface NexusRepository {
+    fun allObservations(): Flow<List<Observation>>
     fun observations(): Flow<List<Observation>>
     fun interests(): Flow<List<Interest>>
     fun discoveries(): Flow<List<Discovery>>
@@ -28,3 +29,4 @@ interface NexusRepository {
     suspend fun failAction(id: String)
     suspend fun seedFirstRun()
 }
+

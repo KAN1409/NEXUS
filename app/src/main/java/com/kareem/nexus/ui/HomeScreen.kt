@@ -245,7 +245,7 @@ private fun TopOfMindCard(
         }
 
         if (item.actions.any { it.kind == NexusActionKind.MARK_RESOLVED }) {
-            TextButton(onClick = { viewModel.rejectAction(actionId) }, enabled = enabled) {
+            TextButton(onClick = { viewModel.resolveAction(actionId) }, enabled = enabled) {
                 Text("Done")
             }
         }

@@ -2,6 +2,7 @@ package com.kareem.nexus.domain.intelligence
 
 import com.kareem.nexus.core.model.*
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertNull
 import org.junit.Assert.assertTrue
 import org.junit.Test
 
@@ -20,7 +21,7 @@ class ContextIntelligenceTest {
         assertEquals(1, attention.size)
         assertEquals(AttentionKind.REQUEST, attention.first().kind)
         assertEquals(AttentionLevel.URGENT, attention.first().level)
-        assertTrue(ContextIntelligence.suggestedActionFor(observation.rawText) != null)
+        assertTrue(ContextIntelligence.suggestedActionFor(observation.rawText, observation.source) != null)
     }
 
     @Test
@@ -47,7 +48,42 @@ class ContextIntelligenceTest {
             createdAt = 300L,
         )
         assertTrue(ContextIntelligence.buildAttention(listOf(observation), now = 500L).isEmpty())
-        assertEquals(null, ContextIntelligence.suggestedActionFor(observation.rawText))
+        assertNull(ContextIntelligence.suggestedActionFor(observation.rawText, observation.source))
+    }
+
+    @Test
+    fun feedbackSolicitation_isSuppressed() {
+        val text = "We'd love your thoughts on your recent order. Tell us what you think."
+        assertTrue(ContextIntelligence.shouldSuppress(text, "com.store.app"))
+        assertNull(ContextIntelligence.suggestedActionFor(text, "com.store.app"))
+    }
+
+    @Test
+    fun socialStoryNotification_isSuppressed() {
+        val text = "Neveen Ahmed — added to their Story"
+        assertTrue(ContextIntelligence.shouldSuppress(text, "com.social.app"))
+        assertTrue(
+            ContextIntelligence.buildAttention(
+                listOf(Observation("4", ObservationType.NOTIFICATION, text, "com.social.app", 100L)),
+                now = 500L,
+            ).isEmpty()
+        )
+    }
+
+    @Test
+    fun nexusSelfNotification_isSuppressed() {
+        assertTrue(
+            ContextIntelligence.shouldSuppress(
+                "Your image is ready to review",
+                "com.kareem.nexus",
+            )
+        )
+    }
+
+    @Test
+    fun realArabicRequest_survivesNoiseFilter() {
+        val text = "عميلنا العزيز برجاء ارسال الاستفسار الخاص بسيادتكم"
+        assertTrue(ContextIntelligence.suggestedActionFor(text, "com.messaging") != null)
     }
 
     @Test
@@ -60,4 +96,3 @@ class ContextIntelligenceTest {
         assertTrue(situations.any { it.kind == SituationKind.PROJECT })
     }
 }
-

@@ -109,4 +109,26 @@ class PersonalIntelligenceEngineTest {
 
         assertTrue(PersonalIntelligenceEngine.topOfMind(listOf(observation), actions, now = now).isEmpty())
     }
+
+    @Test
+    fun deferredSignal_movesOutOfTopOfMindUntilResurfaced() {
+        val observation = Observation(
+            id = "later",
+            type = ObservationType.NOTIFICATION,
+            rawText = "Please confirm the quotation today",
+            source = "com.mail",
+            createdAt = now - 1_000,
+        )
+        val deferred = PreparedAction(
+            id = "action_signal_later",
+            title = "Confirm quotation",
+            description = observation.rawText,
+            state = ActionState.DRAFT,
+            createdAt = observation.createdAt,
+        )
+        val resurfaced = deferred.copy(state = ActionState.READY_FOR_APPROVAL)
+
+        assertTrue(PersonalIntelligenceEngine.topOfMind(listOf(observation), listOf(deferred), now = now).isEmpty())
+        assertEquals(1, PersonalIntelligenceEngine.topOfMind(listOf(observation), listOf(resurfaced), now = now).size)
+    }
 }

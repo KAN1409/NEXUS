@@ -12,7 +12,6 @@ import androidx.compose.runtime.*
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.hilt.lifecycle.viewmodel.compose.hiltViewModel
@@ -31,9 +30,8 @@ fun ActivityScreen(
     var filter by rememberSaveable { mutableStateOf("Active") }
     var selected by remember { mutableStateOf<Observation?>(null) }
 
-    val actions = state.actions.filter {
+    val legacyActions = state.actions.filter {
         when (filter) {
-            "Active" -> it.state in setOf(ActionState.READY_FOR_APPROVAL, ActionState.APPROVED, ActionState.EXECUTING)
             "Later" -> it.state == ActionState.DRAFT
             "Finished" -> it.state in setOf(ActionState.COMPLETED, ActionState.REJECTED, ActionState.FAILED)
             else -> false
@@ -48,7 +46,7 @@ fun ActivityScreen(
         item {
             NexusScreenHeader(
                 title = "Activity",
-                subtitle = "From observation to decision to outcome.",
+                subtitle = "What NEXUS surfaced, what you decided, and what happened next.",
             )
             Spacer(Modifier.height(14.dp))
             LazyRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
@@ -64,62 +62,117 @@ fun ActivityScreen(
 
         state.error?.let { message -> item { Text(message, color = NexusColors.Rose) } }
 
-        if (filter == "Timeline") {
-            item {
-                NexusSectionHeader(
-                    title = "Decision timeline",
-                    subtitle = "A causal history of what NEXUS suggested and what happened next.",
-                )
-            }
-
-            if (activity.events.isEmpty()) {
+        when (filter) {
+            "Active" -> {
                 item {
-                    NexusCard {
-                        Text("No decisions yet", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold)
-                        Text(
-                            "Approve, defer or dismiss a suggestion and the history will appear here.",
-                            color = NexusColors.TextSecondary,
-                        )
+                    NexusSectionHeader(
+                        title = "Active",
+                        subtitle = "Only unresolved signals currently worth your attention.",
+                    )
+                }
+                if (state.topOfMind.isEmpty()) {
+                    item {
+                        NexusCard {
+                            Text("Nothing active", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold)
+                            Text("NEXUS has no unresolved high-value signal right now.", color = NexusColors.TextSecondary)
+                        }
+                    }
+                }
+                items(state.topOfMind, key = { it.id }) { item ->
+                    val observation = state.observations.firstOrNull { it.id == item.observationId }
+                    val actionId = "action_signal_${item.observationId}"
+                    val accent = when {
+                        item.priority >= .88 -> NexusColors.Rose
+                        item.priority >= .75 -> NexusColors.Amber
+                        else -> NexusColors.Cyan
+                    }
+                    NexusCard(accent = accent) {
+                        Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
+                            NexusStatusPill(item.kind.name.replace('_', ' '), accent)
+                            Text(timestamp(item.createdAt), color = NexusColors.TextMuted, style = MaterialTheme.typography.labelSmall)
+                        }
+                        Text(item.title, style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold)
+                        ContentText(item.summary, maxLines = 4)
+                        if (observation != null) {
+                            TextButton(onClick = { selected = observation }) { Text("View evidence") }
+                        }
+                        Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                            if (item.actions.any { it.kind == NexusActionKind.REMIND }) {
+                                OutlinedButton(
+                                    onClick = { viewModel.deferAction(actionId) },
+                                    enabled = actionId !in state.pending,
+                                    modifier = Modifier.weight(1f),
+                                ) { Text("Later") }
+                            }
+                            if (item.actions.any { it.kind == NexusActionKind.MARK_RESOLVED }) {
+                                Button(
+                                    onClick = { viewModel.rejectAction(actionId) },
+                                    enabled = actionId !in state.pending,
+                                    modifier = Modifier.weight(1f),
+                                ) { Text("Done") }
+                            }
+                        }
                     }
                 }
             }
 
-            items(activity.events, key = { it.id }) { event ->
-                val action = state.actions.firstOrNull { it.id == event.actionId }
-                TimelineEvent(
-                    signal = event.signal,
-                    title = action?.title ?: "NEXUS action",
-                    detail = action?.description.orEmpty(),
-                    createdAt = event.createdAt,
-                )
-            }
-        } else {
-            item {
-                val subtitle = when (filter) {
-                    "Active" -> "Suggestions waiting for a decision or outcome."
-                    "Later" -> "Deferred actions that can resurface after their wait period."
-                    else -> "Completed, dismissed and failed actions."
-                }
-                NexusSectionHeader(filter, subtitle)
-            }
-
-            if (actions.isEmpty()) {
+            "Later", "Finished" -> {
                 item {
-                    NexusCard {
-                        Text("No ${filter.lowercase()} actions", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold)
-                        Text("This section will update automatically as you review suggestions.", color = NexusColors.TextSecondary)
+                    NexusSectionHeader(
+                        title = filter,
+                        subtitle = if (filter == "Later")
+                            "Signals you asked NEXUS to bring back later."
+                        else
+                            "Resolved, dismissed and failed historical actions.",
+                    )
+                }
+                if (legacyActions.isEmpty()) {
+                    item {
+                        NexusCard {
+                            Text("No ${filter.lowercase()} items", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold)
+                        }
+                    }
+                }
+                items(legacyActions, key = { it.id }) { action ->
+                    val observation = state.observations.firstOrNull { action.id.endsWith(it.id) }
+                    NexusCard(accent = if (filter == "Finished") NexusColors.Mint else NexusColors.Amber) {
+                        Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
+                            NexusStatusPill(action.state.name.replace('_', ' '), if (filter == "Finished") NexusColors.Mint else NexusColors.Amber)
+                            Text(timestamp(action.createdAt), color = NexusColors.TextMuted, style = MaterialTheme.typography.labelSmall)
+                        }
+                        Text(action.title, style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold)
+                        ContentText(action.description, maxLines = 4)
+                        if (observation != null) {
+                            TextButton(onClick = { selected = observation }) { Text("View evidence") }
+                        }
                     }
                 }
             }
 
-            items(actions, key = { it.id }) { action ->
-                ActionCard(
-                    action = action,
-                    viewModel = viewModel,
-                    pending = state.pending,
-                    observation = state.observations.firstOrNull { action.id.endsWith(it.id) },
-                    onEvidence = { selected = it },
-                )
+            "Timeline" -> {
+                item {
+                    NexusSectionHeader(
+                        title = "Decision timeline",
+                        subtitle = "A causal history of what NEXUS suggested and what happened next.",
+                    )
+                }
+                if (activity.events.isEmpty()) {
+                    item {
+                        NexusCard {
+                            Text("No decisions yet", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold)
+                            Text("Actions you defer, finish or dismiss will appear here.", color = NexusColors.TextSecondary)
+                        }
+                    }
+                }
+                items(activity.events, key = { it.id }) { event ->
+                    val action = state.actions.firstOrNull { it.id == event.actionId }
+                    TimelineEvent(
+                        signal = event.signal,
+                        title = action?.title ?: "NEXUS action",
+                        detail = action?.description.orEmpty(),
+                        createdAt = event.createdAt,
+                    )
+                }
             }
         }
     }
@@ -147,7 +200,7 @@ private fun TimelineEvent(
         FeedbackSignal.APPROVED -> "Action approved"
         FeedbackSignal.DEFERRED -> "Saved for later"
         FeedbackSignal.RESURFACED -> "Suggestion resurfaced"
-        FeedbackSignal.REJECTED -> "Suggestion dismissed"
+        FeedbackSignal.REJECTED -> "Resolved or dismissed"
         FeedbackSignal.STARTED -> "Action in progress"
         FeedbackSignal.COMPLETED -> "Action completed"
         FeedbackSignal.FAILED -> "Action failed"
@@ -168,22 +221,15 @@ private fun TimelineEvent(
             modifier = Modifier.width(18.dp),
             horizontalAlignment = Alignment.CenterHorizontally,
         ) {
-            Box(
-                Modifier.size(10.dp).background(accent, CircleShape),
-            )
-            Box(
-                Modifier.width(2.dp).height(86.dp).background(NexusColors.BorderSoft),
-            )
+            Box(Modifier.size(10.dp).background(accent, CircleShape))
+            Box(Modifier.width(2.dp).height(86.dp).background(NexusColors.BorderSoft))
         }
         Surface(
             modifier = Modifier.weight(1f),
             color = NexusColors.Surface,
             shape = RoundedCornerShape(NexusRadius.Medium),
         ) {
-            Column(
-                Modifier.padding(16.dp),
-                verticalArrangement = Arrangement.spacedBy(6.dp),
-            ) {
+            Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
                 Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
                     NexusStatusPill(label.uppercase(), accent)
                     Text(timestamp(createdAt), color = NexusColors.TextMuted, style = MaterialTheme.typography.labelSmall)

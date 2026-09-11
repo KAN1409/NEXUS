@@ -31,9 +31,9 @@ object MemorySearch {
             val tokenScore = when {
                 haystack.contains(token) -> 20
                 concept.any { alternative -> haystack.contains(alternative) } -> 12
-                token.length >= 5 && words.any { oneEditApart(it, token) } -> 5
+                token.length >= 5 && words.any { oneEditOrTransposeApart(it, token) } -> 5
                 concept.any { alternative ->
-                    alternative.length >= 5 && words.any { word -> oneEditApart(word, alternative) }
+                    alternative.length >= 5 && words.any { word -> oneEditOrTransposeApart(word, alternative) }
                 } -> 3
                 else -> 0
             }
@@ -47,27 +47,36 @@ object MemorySearch {
     private fun conceptAlternatives(token: String): Set<String> =
         conceptGroups.firstOrNull { token in it }.orEmpty() - token
 
-    private fun oneEditApart(a: String, b: String): Boolean {
+    private fun oneEditOrTransposeApart(a: String, b: String): Boolean {
+        if (a == b) return true
         if (kotlin.math.abs(a.length - b.length) > 1) return false
+
+        if (a.length == b.length) {
+            val mismatch = a.indices.filter { a[it] != b[it] }
+            if (mismatch.size == 1) return true
+            if (mismatch.size == 2) {
+                val first = mismatch[0]
+                val second = mismatch[1]
+                if (second == first + 1 && a[first] == b[second] && a[second] == b[first]) return true
+            }
+            return false
+        }
+
+        val longer = if (a.length > b.length) a else b
+        val shorter = if (a.length > b.length) b else a
         var i = 0
         var j = 0
         var edits = 0
-        while (i < a.length && j < b.length) {
-            if (a[i] == b[j]) {
+        while (i < longer.length && j < shorter.length) {
+            if (longer[i] == shorter[j]) {
                 i++
                 j++
-                continue
-            }
-            if (++edits > 1) return false
-            when {
-                a.length > b.length -> i++
-                b.length > a.length -> j++
-                else -> {
-                    i++
-                    j++
-                }
+            } else {
+                if (++edits > 1) return false
+                i++
             }
         }
-        return edits + (a.length - i) + (b.length - j) <= 1
+        if (i < longer.length) edits++
+        return edits <= 1
     }
 }

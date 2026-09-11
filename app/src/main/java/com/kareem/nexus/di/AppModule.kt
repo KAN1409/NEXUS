@@ -4,6 +4,7 @@ import android.content.Context
 import androidx.room.Room
 import com.kareem.nexus.data.local.NexusDao
 import com.kareem.nexus.data.local.NexusDatabase
+import com.kareem.nexus.data.local.NexusMigrations
 import com.kareem.nexus.data.repository.OfflineNexusRepository
 import com.kareem.nexus.domain.repository.NexusRepository
 import dagger.Binds
@@ -21,6 +22,7 @@ object DatabaseModule {
     @Singleton
     fun database(@ApplicationContext context: Context): NexusDatabase =
         Room.databaseBuilder(context, NexusDatabase::class.java, "nexus.db")
+            .addMigrations(NexusMigrations.MIGRATION_1_2)
             .build()
 
     @Provides
@@ -33,4 +35,3 @@ abstract class RepositoryModule {
     @Binds
     abstract fun bindRepository(impl: OfflineNexusRepository): NexusRepository
 }
-

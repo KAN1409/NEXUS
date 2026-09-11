@@ -31,8 +31,6 @@ class UiAcceptanceTest {
         }
         compose.onNode(hasText("Save") and isEnabled(), useUnmergedTree = true).performClick()
 
-        // NavigationBarItem exposes click semantics on its parent while the text lives in a child.
-        // Target the clickable ancestor so the test is stable across Compose semantics merging/IME state.
         val forYouNav = navItem("For You")
         compose.waitUntil(15_000) {
             compose.onAllNodes(forYouNav, useUnmergedTree = true).fetchSemanticsNodes().isNotEmpty()
@@ -41,6 +39,11 @@ class UiAcceptanceTest {
         compose.waitUntil(15_000) {
             compose.onAllNodesWithText("Add", useUnmergedTree = true).fetchSemanticsNodes().isNotEmpty()
         }
+    }
+
+    private fun scrollLazyListTo(matcher: SemanticsMatcher) {
+        compose.onNode(hasScrollAction(), useUnmergedTree = true).performScrollToNode(matcher)
+        compose.waitForIdle()
     }
 
     @Test
@@ -53,7 +56,9 @@ class UiAcceptanceTest {
             compose.onAllNodesWithText("Needs you", useUnmergedTree = true).fetchSemanticsNodes().isNotEmpty()
         }
         compose.onNodeWithText("Ahmed needs a reply", substring = true, useUnmergedTree = true).assertExists()
-        compose.onNodeWithText("CIB payment", substring = true, useUnmergedTree = true).assertExists()
+        val cibPayment = hasText("CIB payment", substring = true)
+        scrollLazyListTo(cibPayment)
+        compose.onNode(cibPayment, useUnmergedTree = true).assertExists()
         screenshot("01-home-value")
 
         compose.onNode(navItem("Memory"), useUnmergedTree = true).performClick()

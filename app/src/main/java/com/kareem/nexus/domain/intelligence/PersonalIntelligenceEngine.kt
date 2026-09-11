@@ -2,7 +2,6 @@ package com.kareem.nexus.domain.intelligence
 
 import com.kareem.nexus.core.model.*
 import java.security.MessageDigest
-import kotlin.math.max
 
 /**
  * NEXUS 2.0 structured interpretation layer.
@@ -40,7 +39,7 @@ object PersonalIntelligenceEngine {
     )
     private val resolvedTerms = listOf(
         "completed", "resolved", "paid successfully", "payment received", "delivered successfully",
-        "no action required", "cancelled", "canceled", "تم", "تم الدفع", "تم السداد", "تم التسليم",
+        "no action required", "cancelled", "canceled", "تم الدفع", "تم السداد", "تم التسليم",
         "تم الالغاء", "تم الإلغاء",
     )
     private val highUrgencyTerms = listOf(
@@ -66,8 +65,8 @@ object PersonalIntelligenceEngine {
 
         val kind = when {
             isNoise -> SignalKind.INFORMATION
-            containsAny(normalized, failureTerms) -> SignalKind.FAILURE
             containsAny(normalized, paymentTerms) -> SignalKind.PAYMENT
+            containsAny(normalized, failureTerms) -> SignalKind.FAILURE
             containsAny(normalized, appointmentTerms) -> SignalKind.APPOINTMENT
             containsAny(normalized, deliveryTerms) -> SignalKind.DELIVERY
             looksLikeRequest(normalized) -> SignalKind.REQUEST

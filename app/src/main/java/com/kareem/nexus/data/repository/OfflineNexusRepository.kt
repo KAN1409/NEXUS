@@ -205,31 +205,37 @@ class OfflineNexusRepository @Inject constructor(
             .take(2)
 
         commitmentSignals.forEachIndexed { index, row ->
-            dao.upsertAction(
-                ActionEntity(
-                    id = "action_commitment_$index",
-                    title = "Review upcoming commitment",
-                    description = row.rawText.take(180),
-                    state = ActionState.READY_FOR_APPROVAL.name,
-                    payloadJson = "{}",
-                    createdAt = now - 100 - index,
-                    updatedAt = now - 100 - index,
+            val id = "action_commitment_$index"
+            if (dao.actionById(id) == null) {
+                dao.upsertAction(
+                    ActionEntity(
+                        id = id,
+                        title = "Review upcoming commitment",
+                        description = row.rawText.take(180),
+                        state = ActionState.READY_FOR_APPROVAL.name,
+                        payloadJson = "{}",
+                        createdAt = now - 100 - index,
+                        updatedAt = now - 100 - index,
+                    )
                 )
-            )
+            }
         }
 
         ranked.firstOrNull()?.let { top ->
-            dao.upsertAction(
-                ActionEntity(
-                    id = "action_focus_" + top.key.lowercase().replace(Regex("[^a-z0-9]+"), "_"),
-                    title = "Review " + top.key,
-                    description = "NEXUS detected this as your strongest recent pattern and prepared it for review.",
-                    state = ActionState.READY_FOR_APPROVAL.name,
-                    payloadJson = "{}",
-                    createdAt = now - 200,
-                    updatedAt = now - 200,
+            val id = "action_focus_" + top.key.lowercase().replace(Regex("[^a-z0-9]+"), "_")
+            if (dao.actionById(id) == null) {
+                dao.upsertAction(
+                    ActionEntity(
+                        id = id,
+                        title = "Review " + top.key,
+                        description = "NEXUS detected this as your strongest recent pattern and prepared it for review.",
+                        state = ActionState.READY_FOR_APPROVAL.name,
+                        payloadJson = "{}",
+                        createdAt = now - 200,
+                        updatedAt = now - 200,
+                    )
                 )
-            )
+            }
         }
     }
 

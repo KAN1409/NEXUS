@@ -28,10 +28,10 @@ class UiAcceptanceTest {
         compose.onNodeWithText("Text or link").performTextInput("موعد أحمد بكرة — Please confirm meeting")
 
         compose.waitUntil(15_000) {
-            compose.onAllNodes(hasText("Save to Memory") and isEnabled(), useUnmergedTree = true)
+            compose.onAllNodes(hasText("Save text") and isEnabled(), useUnmergedTree = true)
                 .fetchSemanticsNodes().isNotEmpty()
         }
-        compose.onNode(hasText("Save to Memory") and isEnabled(), useUnmergedTree = true).performClick()
+        compose.onNode(hasText("Save text") and isEnabled(), useUnmergedTree = true).performClick()
 
         compose.waitUntil(15_000) {
             compose.onAllNodesWithText("Add", useUnmergedTree = true)

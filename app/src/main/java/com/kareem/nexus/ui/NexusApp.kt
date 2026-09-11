@@ -12,6 +12,7 @@ import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.hilt.lifecycle.viewmodel.compose.hiltViewModel
@@ -65,7 +66,14 @@ fun NexusApp(viewModel: CaptureViewModel = hiltViewModel()) {
     val notificationSettings = { launchSafely(context, Intent(Settings.ACTION_NOTIFICATION_LISTENER_SETTINGS)) }
     val usageSettings = { launchSafely(context, Intent(Settings.ACTION_USAGE_ACCESS_SETTINGS)) }
 
+    val pipelineTag = if (state.busy) {
+        "nexus-pipeline-busy-${state.processedRevision}"
+    } else {
+        "nexus-pipeline-ready-${state.processedRevision}"
+    }
+
     Scaffold(
+        modifier = Modifier.testTag(pipelineTag),
         containerColor = NexusColors.Background,
         snackbarHost = { SnackbarHost(snackbars) },
         floatingActionButton = {

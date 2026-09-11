@@ -4,7 +4,22 @@ enum class ObservationType { SHARED_TEXT, SHARED_LINK, IMAGE, NOTIFICATION, APP_
 enum class EntityType { TOPIC, PERSON, PRODUCT, APP, PLACE, ORGANIZATION, URL, OTHER }
 enum class DiscoveryType { DISCOVERY, OPPORTUNITY, COMEBACK, ACTION, WILDCARD }
 enum class ActionState { DRAFT, READY_FOR_APPROVAL, APPROVED, EXECUTING, COMPLETED, REJECTED, FAILED }
-enum class FeedbackSignal { OPENED, SAVED, DISMISSED, ACTED, REJECTED, SHARED, DWELL }
+enum class FeedbackSignal {
+    OPENED,
+    SAVED,
+    DISMISSED,
+    ACTED,
+    REJECTED,
+    SHARED,
+    DWELL,
+    SUGGESTED,
+    APPROVED,
+    DEFERRED,
+    RESURFACED,
+    STARTED,
+    COMPLETED,
+    FAILED,
+}
 
 data class Observation(
     val id: String,
@@ -38,5 +53,12 @@ data class PreparedAction(
     val title: String,
     val description: String,
     val state: ActionState,
+    val createdAt: Long,
+)
+
+data class ActionEvent(
+    val id: String,
+    val actionId: String,
+    val signal: FeedbackSignal,
     val createdAt: Long,
 )

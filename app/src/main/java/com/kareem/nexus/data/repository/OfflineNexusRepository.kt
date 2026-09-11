@@ -43,7 +43,7 @@ class OfflineNexusRepository @Inject constructor(
         if (feedback != null) {
             dao.addFeedback(
                 FeedbackEntity(
-                    id = "feedback_$id_${feedback.name}_$now",
+                    id = "feedback_${id}_${feedback.name}_$now",
                     targetId = id,
                     signal = feedback.name,
                     value = 1.0,
@@ -61,7 +61,7 @@ class OfflineNexusRepository @Inject constructor(
         dao.deferAction(id, now)
         dao.addFeedback(
             FeedbackEntity(
-                id = "feedback_$id_deferred_$now",
+                id = "feedback_${id}_deferred_$now",
                 targetId = id,
                 signal = FeedbackSignal.SAVED.name,
                 value = 0.5,

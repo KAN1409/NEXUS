@@ -14,6 +14,7 @@ import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.core.content.ContextCompat
@@ -67,7 +68,7 @@ fun HomeScreen(contentPadding: PaddingValues, viewModel: HomeViewModel = hiltVie
     }
 
     LazyColumn(
-        modifier = Modifier.fillMaxSize().padding(contentPadding),
+        modifier = Modifier.fillMaxSize().padding(contentPadding).testTag("home-feed"),
         contentPadding = PaddingValues(18.dp, 22.dp, 18.dp, 112.dp),
         verticalArrangement = Arrangement.spacedBy(14.dp),
     ) {
@@ -82,10 +83,7 @@ fun HomeScreen(contentPadding: PaddingValues, viewModel: HomeViewModel = hiltVie
                     else -> "NEXUS is tracking ${state.waitingOn.size + state.upcoming.size} open loops."
                 },
                 trailing = {
-                    TextButton(
-                        onClick = viewModel::refreshUnderstanding,
-                        enabled = "refresh" !in state.pending,
-                    ) { Text("Refresh") }
+                    TextButton(onClick = viewModel::refreshUnderstanding, enabled = "refresh" !in state.pending) { Text("Refresh") }
                 },
             )
         }
@@ -93,86 +91,46 @@ fun HomeScreen(contentPadding: PaddingValues, viewModel: HomeViewModel = hiltVie
         state.error?.let { message -> item { Text(message, color = NexusColors.Rose) } }
 
         if (state.needsYou.isNotEmpty()) {
-            item {
-                NexusSectionHeader(
-                    title = "Needs you",
-                    subtitle = "Unresolved requests, payments and failures with a useful next step.",
-                )
-            }
+            item { NexusSectionHeader("Needs you", "Unresolved requests, payments and failures with a useful next step.") }
             items(state.needsYou, key = { it.id }) { loop ->
-                OpenLoopCard(
-                    loop = loop,
-                    busy = loop.id in state.pending,
-                    onPrimary = { action ->
-                        val result = AndroidActionExecutor.execute(context, loop, action)
-                        viewModel.recordExecution(loop, action, result.success, result.message)
-                        Toast.makeText(context, result.message, Toast.LENGTH_SHORT).show()
-                    },
-                    onRemind = { requestReminder(loop) },
-                    onDone = { viewModel.resolveOpenLoop(loop.id) },
-                    onDismiss = { viewModel.dismissOpenLoop(loop.id) },
-                    onEvidence = {
-                        selected = state.observations.firstOrNull { it.id == loop.observationId }
-                    },
-                )
+                OpenLoopCard(loop, loop.id in state.pending, { action ->
+                    val result = AndroidActionExecutor.execute(context, loop, action)
+                    viewModel.recordExecution(loop, action, result.success, result.message)
+                    Toast.makeText(context, result.message, Toast.LENGTH_SHORT).show()
+                }, { requestReminder(loop) }, { viewModel.resolveOpenLoop(loop.id) }, { viewModel.dismissOpenLoop(loop.id) }) {
+                    selected = state.observations.firstOrNull { it.id == loop.observationId }
+                }
             }
         }
 
         if (state.waitingOn.isNotEmpty()) {
-            item {
-                NexusSectionHeader(
-                    title = "Waiting on",
-                    subtitle = "Things that are currently in somebody else's court or still in transit.",
-                )
-            }
+            item { NexusSectionHeader("Waiting on", "Things that are currently in somebody else's court or still in transit.") }
             items(state.waitingOn, key = { it.id }) { loop ->
-                OpenLoopCard(
-                    loop = loop,
-                    busy = loop.id in state.pending,
-                    onPrimary = { action ->
-                        val result = AndroidActionExecutor.execute(context, loop, action)
-                        viewModel.recordExecution(loop, action, result.success, result.message)
-                        Toast.makeText(context, result.message, Toast.LENGTH_SHORT).show()
-                    },
-                    onRemind = { requestReminder(loop) },
-                    onDone = { viewModel.resolveOpenLoop(loop.id) },
-                    onDismiss = { viewModel.dismissOpenLoop(loop.id) },
-                    onEvidence = { selected = state.observations.firstOrNull { it.id == loop.observationId } },
-                )
+                OpenLoopCard(loop, loop.id in state.pending, { action ->
+                    val result = AndroidActionExecutor.execute(context, loop, action)
+                    viewModel.recordExecution(loop, action, result.success, result.message)
+                    Toast.makeText(context, result.message, Toast.LENGTH_SHORT).show()
+                }, { requestReminder(loop) }, { viewModel.resolveOpenLoop(loop.id) }, { viewModel.dismissOpenLoop(loop.id) }) {
+                    selected = state.observations.firstOrNull { it.id == loop.observationId }
+                }
             }
         }
 
         if (state.upcoming.isNotEmpty()) {
-            item {
-                NexusSectionHeader(
-                    title = "Upcoming",
-                    subtitle = "Commitments NEXUS detected from your recent context.",
-                )
-            }
+            item { NexusSectionHeader("Upcoming", "Commitments NEXUS detected from your recent context.") }
             items(state.upcoming, key = { it.id }) { loop ->
-                OpenLoopCard(
-                    loop = loop,
-                    busy = loop.id in state.pending,
-                    onPrimary = { action ->
-                        val result = AndroidActionExecutor.execute(context, loop, action)
-                        viewModel.recordExecution(loop, action, result.success, result.message)
-                        Toast.makeText(context, result.message, Toast.LENGTH_SHORT).show()
-                    },
-                    onRemind = { requestReminder(loop) },
-                    onDone = { viewModel.resolveOpenLoop(loop.id) },
-                    onDismiss = { viewModel.dismissOpenLoop(loop.id) },
-                    onEvidence = { selected = state.observations.firstOrNull { it.id == loop.observationId } },
-                )
+                OpenLoopCard(loop, loop.id in state.pending, { action ->
+                    val result = AndroidActionExecutor.execute(context, loop, action)
+                    viewModel.recordExecution(loop, action, result.success, result.message)
+                    Toast.makeText(context, result.message, Toast.LENGTH_SHORT).show()
+                }, { requestReminder(loop) }, { viewModel.resolveOpenLoop(loop.id) }, { viewModel.dismissOpenLoop(loop.id) }) {
+                    selected = state.observations.firstOrNull { it.id == loop.observationId }
+                }
             }
         }
 
         if (state.recentChanges.isNotEmpty()) {
-            item {
-                NexusSectionHeader(
-                    title = "Changed",
-                    subtitle = "Situations where new evidence changed the picture.",
-                )
-            }
+            item { NexusSectionHeader("Changed", "Situations where new evidence changed the picture.") }
             items(state.recentChanges.take(4), key = { it.situationId }) { brief ->
                 NexusCard(accent = NexusColors.Violet) {
                     Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
@@ -181,9 +139,7 @@ fun HomeScreen(contentPadding: PaddingValues, viewModel: HomeViewModel = hiltVie
                     }
                     Text(brief.title, style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold)
                     Text(brief.whatChanged, color = NexusColors.TextSecondary)
-                    brief.nextStep?.let { next ->
-                        Text("Next: $next", color = NexusColors.Cyan, style = MaterialTheme.typography.bodyMedium)
-                    }
+                    brief.nextStep?.let { Text("Next: $it", color = NexusColors.Cyan, style = MaterialTheme.typography.bodyMedium) }
                 }
             }
         }
@@ -194,10 +150,8 @@ fun HomeScreen(contentPadding: PaddingValues, viewModel: HomeViewModel = hiltVie
                     NexusStatusPill("ALL CLEAR", NexusColors.Mint)
                     Text("Nothing important needs you", style = MaterialTheme.typography.headlineSmall, fontWeight = FontWeight.Bold)
                     Text(
-                        if (state.observationCount == 0)
-                            "Connect notifications or save a note, link or screenshot. NEXUS will stay quiet until something is actually useful."
-                        else
-                            "Your recent context is still searchable in Memory. NEXUS found no unresolved request, deadline, payment, failure or follow-up worth interrupting you for.",
+                        if (state.observationCount == 0) "Connect notifications or save a note, link or screenshot. NEXUS will stay quiet until something is actually useful."
+                        else "Your recent context is still searchable in Memory. NEXUS found no unresolved request, deadline, payment, failure or follow-up worth interrupting you for.",
                         color = NexusColors.TextSecondary,
                     )
                 }
@@ -225,12 +179,10 @@ private fun OpenLoopCard(
         OpenLoopKind.NEEDS_REPLY, OpenLoopKind.NEEDS_ACTION -> NexusColors.Cyan
         OpenLoopKind.FOLLOW_UP -> NexusColors.Mint
     }
-    val primary = loop.actions.firstOrNull {
-        it.kind !in setOf(NexusActionKind.REMIND, NexusActionKind.MARK_RESOLVED)
-    }
+    val primary = loop.actions.firstOrNull { it.kind !in setOf(NexusActionKind.REMIND, NexusActionKind.MARK_RESOLVED) }
     val canRemind = loop.actions.any { it.kind == NexusActionKind.REMIND }
 
-    NexusCard(accent = accent) {
+    NexusCard(modifier = Modifier.testTag("open-loop-${loop.kind.name.lowercase()}"), accent = accent) {
         Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
             NexusStatusPill(loop.kind.label(), accent)
             Text(loop.dueAt?.let(::dueLabel) ?: timestamp(loop.createdAt), color = NexusColors.TextMuted, style = MaterialTheme.typography.labelSmall)
@@ -243,19 +195,8 @@ private fun OpenLoopCard(
         }
         if (primary != null || canRemind) {
             Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                if (primary != null) {
-                    Button(onClick = { onPrimary(primary) }, enabled = !busy, modifier = Modifier.weight(1f)) {
-                        Text(primary.label)
-                    }
-                }
-                if (canRemind) {
-                    OutlinedButton(
-                        onClick = onRemind,
-                        enabled = !busy,
-                        modifier = Modifier.weight(1f),
-                        border = BorderStroke(1.dp, NexusColors.Border),
-                    ) { Text("Remind") }
-                }
+                if (primary != null) Button(onClick = { onPrimary(primary) }, enabled = !busy, modifier = Modifier.weight(1f)) { Text(primary.label) }
+                if (canRemind) OutlinedButton(onClick = onRemind, enabled = !busy, modifier = Modifier.weight(1f), border = BorderStroke(1.dp, NexusColors.Border)) { Text("Remind") }
             }
         }
         Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
@@ -289,6 +230,4 @@ private fun dueLabel(timestamp: Long): String {
 }
 
 @Composable
-fun SectionTitle(title: String, subtitle: String) {
-    NexusSectionHeader(title = title, subtitle = subtitle)
-}
+fun SectionTitle(title: String, subtitle: String) { NexusSectionHeader(title = title, subtitle = subtitle) }

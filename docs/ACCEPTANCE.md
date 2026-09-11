@@ -1,49 +1,42 @@
-# NEXUS 1.1 Acceptance
+# NEXUS 2.0 Acceptance
 
-The all-in-one release is complete only when every applicable gate passes.
+NEXUS 2.0 is releasable only when every applicable gate passes on the latest branch head.
 
 ## Automated release gates
 1. Unit tests pass.
 2. Debug APK and Android test APK compile.
-3. Emulator UI acceptance passes across For You, Memory, Discover, Activity and Settings.
-4. Capture/search/navigation survives Activity recreation.
-5. Request/appointment classification tests pass in English and Arabic.
-6. Promotional feedback prompts, social story/reaction noise and NEXUS self-notifications are suppressed.
-7. Bilingual concept-aware Memory search and typo tolerance tests pass.
-8. Existing Room schema remains compatible and destructive migration is not introduced.
+3. Room `1 -> 2` migration test preserves legacy observations and creates the new structured-intelligence tables.
+4. Emulator UI acceptance passes across For You, Memory, Discover, Activity and Settings.
+5. Capture, search, navigation and Activity recreation pass.
+6. English and Arabic request/appointment/payment classification tests pass.
+7. Promotional feedback prompts, passive social/story noise and NEXUS self-notifications are suppressed.
+8. Memory typo tolerance and bilingual concept matching tests pass.
+9. No destructive Room migration is introduced.
 
 ## Installed-device gates
-9. APK installs with `adb install -r` over the existing permanent v2-signed NEXUS.
-10. Existing Memory, actions and interests survive the update.
-11. No package/signing regression.
-12. No crash on launch or navigation.
-13. Notification and Usage Access state is truthful after returning from Android Settings.
-14. Context refresh happens automatically when NEXUS resumes.
-15. App-usage data remains bounded and does not flood Memory.
-16. Shared images remain viewable; supported image text is OCR-indexed into Memory.
-17. Memory search/filter behavior is usable with real Arabic and English context.
-18. False-positive action volume is materially lower than the previous build.
-19. Real requests, appointments, payments, deliveries, failures and follow-ups still surface when appropriate.
-20. Later defers, Dismiss remains rejected, Approved can Start, and in-progress actions can Complete or Fail.
-21. Discover shows meaningful situations/insights, not only generic theme bars.
-22. Activity shows action states and a causal decision timeline.
-23. No dead controls or placeholder screens.
+10. Candidate is signed with the permanent NEXUS v2 signing identity and installs only with `adb install -r` over the existing app.
+11. Existing Memory, actions, feedback and interests survive the Room v1 -> v2 migration.
+12. Package remains `com.kareem.nexus`; signer continuity is verified before install.
+13. No crash on cold launch, resume, capture, navigation, background observation or action interaction.
+14. Notification Access and Usage Access states remain truthful after returning from Android Settings.
+15. Notification capture remembers genuinely new repeated events while deduplicating updates of the same notification event.
+16. App-usage observations remain bounded and do not flood Memory.
+17. Shared images remain stored privately; baseline OCR works when supported, and optional Gemini Nano failure never blocks capture/search.
+18. Memory search/filter behavior is usable with real Arabic and English context; optional semantic expansion improves results without hiding deterministic direct matches.
+19. Top of mind is materially quieter than the old generic-action UI while still surfacing real requests, appointments, payments, deliveries, failures and follow-ups.
+20. Evidence opens correctly from Top of mind and Activity.
+21. Context actions launch the source/calendar when possible and fail safely when Android cannot resolve the target.
+22. `Remind tomorrow` moves the item to Later and deferred items can resurface.
+23. `Done` records a resolved outcome; dismiss/reject remains a distinct outcome.
+24. Connected situations group related evidence instead of duplicating independent cards.
+25. Discover, Activity and Settings show the rebuilt NEXUS 2.0 product model rather than legacy placeholder/generic surfaces.
+26. No dead controls, placeholder screens, package-lineage changes or hidden destructive behavior.
 
 ## Five-second product test
-Within five seconds of opening For You, the user should understand:
-- what changed today;
-- what actually needs attention;
-- what NEXUS has learned;
-- what evidence supports a suggestion;
-- what action can be taken next.
-
-If nothing useful needs attention, NEXUS should stay quiet rather than manufacture cards.
+Within five seconds of opening For You, the user should understand what changed, what actually needs attention, what NEXUS connected, what evidence supports it and what useful step can be taken next. If nothing useful needs attention, NEXUS should stay quiet rather than manufacture cards.
 
 ## UI target
-The five primary surfaces should follow the NEXUS showcase direction: premium dark background, compact cyan/violet accents, strong hierarchy, dense but readable cards, concise status pills and consistent bottom navigation.
+The five primary surfaces follow the NEXUS showcase direction: premium dark background, compact cyan/violet accents, strong hierarchy, dense but readable evidence cards, concise status pills and consistent bottom navigation.
 
 ## Scope truth
-- NEXUS is local-first and heuristic; it does not claim LLM certainty.
-- Memory search uses local normalization, fuzzy matching and bilingual concept expansion rather than a neural embedding model.
-- OCR is local and best-effort; script/image quality can limit extracted text.
-- “Start tracking” records user progress and does not execute arbitrary external work without explicit user interaction.
+NEXUS is local-first. Its deterministic intelligence is heuristic and confidence-ranked. Optional Gemini Nano inference is an on-device enhancement, not a requirement or a claim of perfect semantic understanding. OCR quality still depends on image quality and the local recognizer/model available on the device.

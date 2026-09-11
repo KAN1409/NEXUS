@@ -38,7 +38,7 @@ interface NexusDao {
     @Query("SELECT * FROM actions ORDER BY createdAt DESC LIMIT :limit")
     fun observeAllActions(limit: Int = 50): Flow<List<ActionEntity>>
 
-    @Query("DELETE FROM actions WHERE state IN ('DRAFT','READY_FOR_APPROVAL')")
+    @Query("DELETE FROM actions WHERE state = 'READY_FOR_APPROVAL'")
     suspend fun clearGeneratedActions()
 
     @Query("SELECT * FROM actions WHERE id = :id LIMIT 1")

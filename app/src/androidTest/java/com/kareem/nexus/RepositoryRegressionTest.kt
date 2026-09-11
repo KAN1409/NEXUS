@@ -91,6 +91,24 @@ class RepositoryRegressionTest {
         assertEquals(OpenLoopState.SNOOZED, repository.openLoops().first().single().state)
     }
 
+    @Test fun threeValueSignalsProduceThreeOpenLoopsIncludingCibPayment() = runBlocking {
+        repository.captureObservation(ObservationType.MANUAL, "Ahmed — Please send the quotation today", "NEXUS")
+        repository.rebuildUnderstanding()
+        repository.captureObservation(ObservationType.MANUAL, "CIB — payment of 5672 EGP is due today", "NEXUS")
+        repository.rebuildUnderstanding()
+        repository.captureObservation(ObservationType.MANUAL, "CIB — please confirm your card payment today", "NEXUS")
+        repository.rebuildUnderstanding()
+
+        val observations = repository.allObservations().first()
+        assertEquals(3, observations.size)
+
+        val loops = repository.openLoops().first().filter { it.state in setOf(OpenLoopState.OPEN, OpenLoopState.WAITING) }
+        assertEquals(3, loops.size)
+        assertTrue(loops.any { it.kind == OpenLoopKind.NEEDS_REPLY && it.title.contains("Ahmed", ignoreCase = true) })
+        assertTrue(loops.any { it.kind == OpenLoopKind.PAYMENT && it.title.contains("CIB payment", ignoreCase = true) })
+        assertTrue(loops.any { it.detail.contains("5672 EGP", ignoreCase = true) })
+    }
+
     @Test fun databaseReopenPreservesExistingRecords() = runBlocking {
         val context = ApplicationProvider.getApplicationContext<Context>()
         val name = "upgrade-preservation-test.db"

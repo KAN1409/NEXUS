@@ -46,7 +46,8 @@ fun ObservationsScreen(contentPadding: PaddingValues, viewModel: MemoryViewModel
                 onValueChange = { viewModel.query.value = it },
                 modifier = Modifier.fillMaxWidth(),
                 singleLine = true,
-                placeholder = { Text("Search people, amounts, screenshots or ideas") },
+                label = { Text("Search memory") },
+                placeholder = { Text("People, amounts, screenshots or ideas") },
                 leadingIcon = {
                     NexusIcon(
                         type = NexusIconType.Discover,

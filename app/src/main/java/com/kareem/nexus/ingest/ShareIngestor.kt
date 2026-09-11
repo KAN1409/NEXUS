@@ -8,6 +8,8 @@ import com.google.mlkit.vision.common.InputImage
 import com.google.mlkit.vision.text.TextRecognition
 import com.google.mlkit.vision.text.latin.TextRecognizerOptions
 import com.kareem.nexus.core.model.ObservationType
+import com.kareem.nexus.domain.intelligence.ContextIntelligence
+import com.kareem.nexus.domain.intelligence.OnDeviceAi
 import com.kareem.nexus.domain.repository.NexusRepository
 import dagger.hilt.android.qualifiers.ApplicationContext
 import java.io.File
@@ -20,6 +22,7 @@ import org.json.JSONObject
 @Singleton
 class ShareIngestor @Inject constructor(
     private val repository: NexusRepository,
+    private val onDeviceAi: OnDeviceAi,
     @ApplicationContext private val context: Context,
 ) {
     suspend fun ingest(intent: Intent): Int {
@@ -62,7 +65,9 @@ class ShareIngestor @Inject constructor(
                 android.graphics.BitmapFactory.decodeFile(file.path, options)
                 require(options.outWidth > 0 && options.outHeight > 0) { "Unsupported image" }
 
-                val ocrText = recognizeText(file).take(4000)
+                val mlKitText = recognizeLatinText(file).take(4000)
+                val nanoText = onDeviceAi.extractVisibleText(file)?.take(4000).orEmpty()
+                val ocrText = mergeRecognition(mlKitText, nanoText).take(6000)
                 val searchableText = buildString {
                     append("Saved image")
                     if (ocrText.isNotBlank()) {
@@ -79,6 +84,8 @@ class ShareIngestor @Inject constructor(
                         .put("mime", intent.type)
                         .put("attachment", file.name)
                         .put("ocr", ocrText.isNotBlank())
+                        .put("latinOcr", mlKitText.isNotBlank())
+                        .put("nanoVision", nanoText.isNotBlank())
                         .toString(),
                 )
                 captured++
@@ -90,7 +97,7 @@ class ShareIngestor @Inject constructor(
         return captured
     }
 
-    private suspend fun recognizeText(file: File): String {
+    private suspend fun recognizeLatinText(file: File): String {
         val recognizer = TextRecognition.getClient(TextRecognizerOptions.DEFAULT_OPTIONS)
         return try {
             val image = InputImage.fromFilePath(context, Uri.fromFile(file))
@@ -100,6 +107,16 @@ class ShareIngestor @Inject constructor(
         } finally {
             recognizer.close()
         }
+    }
+
+    private fun mergeRecognition(first: String, second: String): String {
+        if (first.isBlank()) return second.trim()
+        if (second.isBlank()) return first.trim()
+        val a = ContextIntelligence.normalize(first)
+        val b = ContextIntelligence.normalize(second)
+        if (a == b || a.contains(b)) return first.trim()
+        if (b.contains(a)) return second.trim()
+        return first.trim() + "\n" + second.trim()
     }
 
     private fun collectUris(intent: Intent): List<Uri> {

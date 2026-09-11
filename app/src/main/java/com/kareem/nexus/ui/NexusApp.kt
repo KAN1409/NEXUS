@@ -66,7 +66,7 @@ fun NexusApp(viewModel: CaptureViewModel = hiltViewModel()) {
             destination == NexusDestination.ForYou -> HomeScreen(contentPadding = padding)
             destination == NexusDestination.Memory -> ObservationsScreen(contentPadding = padding)
             destination == NexusDestination.Discover -> DiscoverScreen(contentPadding = padding)
-            destination == NexusDestination.Activity -> PlaceholderScreen("Activity", "Your observation and action history will appear here as NEXUS starts working for you.", padding)
+            destination == NexusDestination.Activity -> ActivityScreen(contentPadding = padding)
             else -> SettingsScreen(padding, captureState, { context.startActivity(Intent("android.settings.ACTION_NOTIFICATION_LISTENER_SETTINGS")) }, { context.startActivity(Intent(Settings.ACTION_USAGE_ACCESS_SETTINGS)) }, viewModel::captureUsage)
         }
     }

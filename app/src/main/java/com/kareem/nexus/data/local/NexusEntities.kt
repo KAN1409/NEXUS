@@ -78,3 +78,48 @@ data class FeedbackEntity(
     val value: Double,
     val createdAt: Long,
 )
+
+@Entity(
+    tableName = "observation_understanding",
+    indices = [Index("kind"), Index("priority"), Index("analyzedAt")],
+)
+data class ObservationUnderstandingEntity(
+    @PrimaryKey val observationId: String,
+    val kind: String,
+    val title: String,
+    val summary: String,
+    val factsJson: String,
+    val actionsJson: String,
+    val priority: Double,
+    val confidence: Double,
+    val isNoise: Boolean,
+    val analyzedAt: Long,
+)
+
+@Entity(
+    tableName = "situations",
+    indices = [Index("state"), Index("priority"), Index("lastUpdatedAt")],
+)
+data class SituationEntity(
+    @PrimaryKey val id: String,
+    val title: String,
+    val summary: String,
+    val kind: String,
+    val state: String,
+    val factsJson: String,
+    val actionsJson: String,
+    val priority: Double,
+    val confidence: Double,
+    val createdAt: Long,
+    val lastUpdatedAt: Long,
+)
+
+@Entity(
+    tableName = "situation_members",
+    primaryKeys = ["situationId", "observationId"],
+    indices = [Index("situationId"), Index("observationId")],
+)
+data class SituationMemberEntity(
+    val situationId: String,
+    val observationId: String,
+)

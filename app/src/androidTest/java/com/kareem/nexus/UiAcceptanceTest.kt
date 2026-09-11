@@ -20,7 +20,7 @@ class UiAcceptanceTest {
     @Test fun captureSearchNavigateAndRecreate() {
         compose.onNodeWithText("Add").performClick()
         compose.onNodeWithText("Text or link").performTextInput("موعد أحمد بكرة — Please confirm meeting")
-        compose.waitUntil(15000) { compose.onAllNodesWithText("Save to Memory").fetchSemanticsNodes().isNotEmpty() }
+        compose.waitUntil(15000) { compose.onAllNodes(hasText("Save to Memory") and isEnabled()).fetchSemanticsNodes().isNotEmpty() }
         compose.onNodeWithText("Save to Memory").assertIsEnabled().performClick()
         compose.waitUntil(15000) { compose.onAllNodesWithText("Add").fetchSemanticsNodes().isNotEmpty() }
         screenshot("01-home")

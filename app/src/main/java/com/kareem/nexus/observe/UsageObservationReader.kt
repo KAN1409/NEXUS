@@ -60,7 +60,7 @@ class UsageObservationReader @Inject constructor(
             val minutes = (foregroundMs / 60_000L).coerceAtLeast(1L)
             repository.captureObservation(
                 ObservationType.APP_USAGE,
-                "$label · $minutes min in the last 24 hours",
+                "$label · $minutes min in the recent usage window",
                 packageName,
                 "{\"foregroundMs\":$foregroundMs,\"windowHours\":24}",
             )
@@ -69,3 +69,4 @@ class UsageObservationReader @Inject constructor(
         return rows.size
     }
 }
+

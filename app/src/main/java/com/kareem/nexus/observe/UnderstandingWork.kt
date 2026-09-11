@@ -3,8 +3,8 @@ package com.kareem.nexus.observe
 import android.content.Context
 import androidx.work.*
 import com.kareem.nexus.domain.repository.NexusRepository
-import dagger.EntryPoint
-import dagger.InstallIn
+import dagger.hilt.EntryPoint
+import dagger.hilt.InstallIn
 import dagger.hilt.EntryPoints
 import dagger.hilt.components.SingletonComponent
 import java.util.concurrent.TimeUnit

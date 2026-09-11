@@ -32,3 +32,10 @@ Within five seconds of opening Home, the user should understand:
 - what action is available next.
 
 If there is nothing useful, NEXUS should stay quiet instead of manufacturing generic cards.
+
+## Integration validation
+Automated gates now include concurrent decision/event consistency, duplicate capture identity, deferred resurfacing, full-history retrieval, database reopen persistence, and emulator capture/search/navigation.
+
+Human/device gates remain: permanent v2 signature match, update over the installed Samsung APK, existing real data retained, real notification capture and access-settings round trips. CI success alone does not satisfy these gates.
+
+Scope clarification: “Start tracking” records the user's progress; it does not execute arbitrary external work. Image attachments are viewable but have no OCR. The engine uses heuristic topic/attention detection rather than an LLM.

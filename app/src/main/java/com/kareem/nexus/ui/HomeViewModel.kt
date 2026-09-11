@@ -10,10 +10,6 @@ import javax.inject.Inject
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.flow.*
-import kotlinx.coroutines.flow.SharingStarted
-import kotlinx.coroutines.flow.StateFlow
-import kotlinx.coroutines.flow.combine
-import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.launch
 
 data class HomeUiState(
@@ -45,6 +41,7 @@ class HomeViewModel @Inject constructor(
 
     private val error = MutableStateFlow<String?>(null)
     private val pending = MutableStateFlow<Set<String>>(emptySet())
+
     private val content = combine(
         repository.observationCount(),
         repository.observations(),
@@ -52,16 +49,34 @@ class HomeViewModel @Inject constructor(
         repository.discoveries(),
         repository.actions(),
     ) { observationCount, observations, interests, discoveries, actions ->
-        val attention = ContextIntelligence.buildAttention(ContextIntelligence.unresolved(observations, actions))
+        val byId = observations.associateBy { it.id }
+        fun sourceObservation(action: PreparedAction): Observation? {
+            val rawId = action.id.removePrefix("action_signal_").removePrefix("action_commitment_")
+            return byId[rawId]
+        }
+
+        val visibleActions = actions.filter { action ->
+            when (action.state) {
+                ActionState.READY_FOR_APPROVAL, ActionState.DRAFT -> {
+                    val source = sourceObservation(action)
+                    source == null || !ContextIntelligence.shouldSuppress(source.rawText, source.source)
+                }
+                else -> true
+            }
+        }
+        val attention = ContextIntelligence.buildAttention(
+            ContextIntelligence.unresolved(observations, visibleActions),
+        )
         val situations = ContextIntelligence.buildSituations(observations)
+
         HomeUiState(
             observationCount = observationCount,
             interestCount = interests.size,
             observations = observations,
             interests = interests,
             discoveries = discoveries,
-            actions = actions,
-            readyActionCount = actions.count { it.state == ActionState.READY_FOR_APPROVAL },
+            actions = visibleActions,
+            readyActionCount = visibleActions.count { it.state == ActionState.READY_FOR_APPROVAL },
             attention = attention,
             situations = situations,
             brief = ContextIntelligence.buildDailyBrief(observations, interests, attention),
@@ -71,6 +86,7 @@ class HomeViewModel @Inject constructor(
         if (cause is CancellationException) throw cause
         emit(HomeUiState(error = "Could not load your context. Reopen NEXUS to retry."))
     }
+
     val uiState = combine(content, error, pending) { state, message, busy ->
         state.copy(error = message ?: state.error, pending = busy)
     }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), HomeUiState())
@@ -79,10 +95,16 @@ class HomeViewModel @Inject constructor(
         if (id in pending.value) return
         pending.update { it + id }
         viewModelScope.launch {
-            try { block(); error.value = null }
-            catch (cancel: CancellationException) { throw cancel }
-            catch (_: Exception) { error.value = "Could not save this change. Please retry." }
-            finally { pending.update { it - id } }
+            try {
+                block()
+                error.value = null
+            } catch (cancel: CancellationException) {
+                throw cancel
+            } catch (_: Exception) {
+                error.value = "Could not save this change. Please retry."
+            } finally {
+                pending.update { it - id }
+            }
         }
     }
 

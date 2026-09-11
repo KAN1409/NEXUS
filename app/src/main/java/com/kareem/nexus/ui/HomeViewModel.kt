@@ -8,8 +8,8 @@ import com.kareem.nexus.domain.intelligence.PersonalIntelligenceEngine
 import com.kareem.nexus.domain.repository.NexusRepository
 import dagger.hilt.android.lifecycle.HiltViewModel
 import javax.inject.Inject
-import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.CancellationException
+import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.*
 import kotlinx.coroutines.launch
 
@@ -35,23 +35,51 @@ data class HomeUiState(
         topTheme = null,
     ),
     val insights: List<IntelligenceInsight> = emptyList(),
+    val openLoops: List<OpenLoop> = emptyList(),
+    val needsYou: List<OpenLoop> = emptyList(),
+    val waitingOn: List<OpenLoop> = emptyList(),
+    val upcoming: List<OpenLoop> = emptyList(),
+    val situationBriefs: List<SituationBrief> = emptyList(),
+    val recentChanges: List<SituationBrief> = emptyList(),
+)
+
+private data class LegacyHomeContent(
+    val observationCount: Int,
+    val observations: List<Observation>,
+    val interests: List<Interest>,
+    val discoveries: List<Discovery>,
+    val actions: List<PreparedAction>,
+)
+
+private data class UnifiedHomeContent(
+    val loops: List<OpenLoop>,
+    val briefs: List<SituationBrief>,
 )
 
 @HiltViewModel
 class HomeViewModel @Inject constructor(
     private val repository: NexusRepository,
 ) : ViewModel() {
-
     private val error = MutableStateFlow<String?>(null)
     private val pending = MutableStateFlow<Set<String>>(emptySet())
 
-    private val content = combine(
+    private val legacy = combine(
         repository.observationCount(),
         repository.observations(),
         repository.interests(),
         repository.discoveries(),
         repository.actions(),
     ) { observationCount, observations, interests, discoveries, actions ->
+        LegacyHomeContent(observationCount, observations, interests, discoveries, actions)
+    }
+
+    private val unified = combine(repository.openLoops(), repository.situationBriefs()) { loops, briefs ->
+        UnifiedHomeContent(loops, briefs)
+    }
+
+    private val content = combine(legacy, unified) { legacyState, unifiedState ->
+        val observations = legacyState.observations
+        val actions = legacyState.actions
         val byId = observations.associateBy { it.id }
         fun sourceObservation(action: PreparedAction): Observation? {
             val rawId = action.id.removePrefix("action_signal_").removePrefix("action_commitment_")
@@ -68,26 +96,49 @@ class HomeViewModel @Inject constructor(
             }
         }
 
-        val unresolved = ContextIntelligence.unresolved(observations, visibleActions)
-        val attention = ContextIntelligence.buildAttention(unresolved)
-        val situations = ContextIntelligence.buildSituations(observations)
+        val activeLoops = unifiedState.loops
+            .filter { it.state in setOf(OpenLoopState.OPEN, OpenLoopState.WAITING) }
+            .sortedWith(compareByDescending<OpenLoop> { it.priority }.thenBy { it.dueAt ?: Long.MAX_VALUE })
+
+        val needsYou = activeLoops.filter {
+            it.kind !in setOf(OpenLoopKind.WAITING_ON, OpenLoopKind.DELIVERY, OpenLoopKind.UPCOMING)
+        }.take(5)
+        val waitingOn = activeLoops.filter {
+            it.kind in setOf(OpenLoopKind.WAITING_ON, OpenLoopKind.DELIVERY)
+        }.take(5)
+        val upcoming = activeLoops.filter { it.kind == OpenLoopKind.UPCOMING }
+            .sortedBy { it.dueAt ?: Long.MAX_VALUE }
+            .take(5)
+
+        val attention = ContextIntelligence.buildAttention(ContextIntelligence.unresolved(observations, visibleActions))
+        val legacySituations = ContextIntelligence.buildSituations(observations)
         val topOfMind = PersonalIntelligenceEngine.topOfMind(observations, visibleActions)
-        val contextSituations = PersonalIntelligenceEngine.buildSituations(observations)
+        val contextSituations = PersonalIntelligenceEngine.buildSituations(observations, limit = 20)
+        val recentChanges = unifiedState.briefs
+            .filter { it.evidenceCount > 1 }
+            .sortedByDescending { it.lastUpdatedAt }
+            .take(6)
 
         HomeUiState(
-            observationCount = observationCount,
-            interestCount = interests.size,
+            observationCount = legacyState.observationCount,
+            interestCount = legacyState.interests.size,
             observations = observations,
-            interests = interests,
-            discoveries = discoveries,
+            interests = legacyState.interests,
+            discoveries = legacyState.discoveries,
             actions = visibleActions,
-            readyActionCount = topOfMind.size,
+            readyActionCount = activeLoops.size,
             attention = attention,
-            situations = situations,
+            situations = legacySituations,
             topOfMind = topOfMind,
             contextSituations = contextSituations,
-            brief = ContextIntelligence.buildDailyBrief(observations, interests, attention),
-            insights = ContextIntelligence.buildInsights(observations, interests, situations),
+            brief = ContextIntelligence.buildDailyBrief(observations, legacyState.interests, attention),
+            insights = ContextIntelligence.buildInsights(observations, legacyState.interests, legacySituations),
+            openLoops = unifiedState.loops,
+            needsYou = needsYou,
+            waitingOn = waitingOn,
+            upcoming = upcoming,
+            situationBriefs = unifiedState.briefs,
+            recentChanges = recentChanges,
         )
     }.flowOn(Dispatchers.Default).catch { cause ->
         if (cause is CancellationException) throw cause
@@ -123,4 +174,19 @@ class HomeViewModel @Inject constructor(
     fun completeAction(id: String) = action(id) { repository.completeAction(id) }
     fun failAction(id: String) = action(id) { repository.failAction(id) }
     fun refreshUnderstanding() = action("refresh") { repository.rebuildUnderstanding() }
+
+    fun snoozeOpenLoop(id: String, until: Long) = action(id) { repository.snoozeOpenLoop(id, until) }
+    fun resolveOpenLoop(id: String) = action(id) { repository.resolveOpenLoop(id) }
+    fun dismissOpenLoop(id: String) = action(id) { repository.dismissOpenLoop(id) }
+    fun recordExecution(loop: OpenLoop, contextAction: ContextAction, success: Boolean, message: String?) =
+        action("execution-${loop.id}-${System.nanoTime()}") {
+            repository.recordActionExecution(
+                openLoopId = loop.id,
+                actionKind = contextAction.kind,
+                label = contextAction.label,
+                payload = contextAction.payload,
+                state = if (success) ExecutionState.SUCCEEDED else ExecutionState.FAILED,
+                message = message,
+            )
+        }
 }

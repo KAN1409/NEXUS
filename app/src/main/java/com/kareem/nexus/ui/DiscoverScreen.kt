@@ -13,7 +13,7 @@ import androidx.compose.ui.unit.dp
 import androidx.hilt.lifecycle.viewmodel.compose.hiltViewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.kareem.nexus.core.model.Observation
-import com.kareem.nexus.core.model.SignalKind
+import com.kareem.nexus.core.model.SituationBrief
 import com.kareem.nexus.ui.design.*
 
 @Composable
@@ -21,18 +21,26 @@ fun DiscoverScreen(contentPadding: PaddingValues, viewModel: HomeViewModel = hil
     val state by viewModel.uiState.collectAsStateWithLifecycle()
     var expanded by remember { mutableStateOf<String?>(null) }
     var selected by remember { mutableStateOf<Observation?>(null) }
-    var filter by rememberSaveable { mutableStateOf("All") }
-    val filters = listOf("All", "Situations", "Changes", "Themes")
+    var filter by rememberSaveable { mutableStateOf("Active") }
+    val filters = listOf("Active", "Changed", "All")
+
+    val rows = remember(state.situationBriefs, filter) {
+        when (filter) {
+            "Active" -> state.situationBriefs.filter { it.openLoopCount > 0 }
+            "Changed" -> state.situationBriefs.filter { it.evidenceCount > 1 }.sortedByDescending { it.lastUpdatedAt }
+            else -> state.situationBriefs
+        }
+    }
 
     LazyColumn(
         modifier = Modifier.fillMaxSize().padding(contentPadding),
-        contentPadding = PaddingValues(18.dp, 22.dp, 18.dp, 104.dp),
-        verticalArrangement = Arrangement.spacedBy(16.dp),
+        contentPadding = PaddingValues(18.dp, 22.dp, 18.dp, 108.dp),
+        verticalArrangement = Arrangement.spacedBy(14.dp),
     ) {
         item {
             NexusScreenHeader(
-                title = "Discover",
-                subtitle = "The people, projects and situations NEXUS connected from your evidence.",
+                title = "Situations",
+                subtitle = "Threads that connect evidence, current state, open loops and the next useful step.",
             )
             Spacer(Modifier.height(14.dp))
             LazyRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
@@ -46,41 +54,66 @@ fun DiscoverScreen(contentPadding: PaddingValues, viewModel: HomeViewModel = hil
             }
         }
 
-        if ((filter == "All" || filter == "Situations") && state.contextSituations.isNotEmpty()) {
+        if (rows.isEmpty()) {
             item {
-                NexusSectionHeader(
-                    title = "Connected situations",
-                    subtitle = "Several signals collapsed into one thread so you can understand the situation, not the notifications.",
-                )
+                NexusCard(accent = NexusColors.Mint) {
+                    Text(
+                        if (state.observationCount == 0) "No situations yet" else "No ${filter.lowercase()} situations",
+                        style = MaterialTheme.typography.titleLarge,
+                        fontWeight = FontWeight.Bold,
+                    )
+                    Text(
+                        "NEXUS only creates a Situation after related evidence forms a real thread. One random notification is not enough.",
+                        color = NexusColors.TextSecondary,
+                    )
+                }
             }
-            items(state.contextSituations, key = { it.id }) { situation ->
-                NexusCard(accent = if (situation.priority >= .8) NexusColors.Amber else NexusColors.Cyan) {
-                    Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
-                        NexusStatusPill(
-                            if (situation.priority >= .8) "NEEDS ATTENTION" else "CONNECTED",
-                            if (situation.priority >= .8) NexusColors.Amber else NexusColors.Cyan,
-                        )
-                        Text(
-                            "${situation.observationIds.size} signals",
-                            style = MaterialTheme.typography.labelSmall,
-                            color = NexusColors.TextMuted,
-                        )
-                    }
-                    Text(situation.title, style = MaterialTheme.typography.titleLarge, fontWeight = FontWeight.Bold)
-                    Text(situation.summary, color = NexusColors.TextSecondary)
+        }
 
-                    if (situation.facts.isNotEmpty()) {
-                        LazyRow(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
-                            items(situation.facts.take(5), key = { "${it.kind}:${it.normalizedValue}" }) { fact ->
-                                NexusStatusPill(fact.value, NexusColors.Mint)
-                            }
+        items(rows, key = SituationBrief::situationId) { brief ->
+            val accent = when {
+                brief.priority >= .85 -> NexusColors.Rose
+                brief.openLoopCount > 0 -> NexusColors.Cyan
+                brief.evidenceCount > 2 -> NexusColors.Violet
+                else -> NexusColors.Mint
+            }
+            val situation = state.contextSituations.firstOrNull { it.id == brief.situationId }
+
+            NexusCard(accent = accent) {
+                Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
+                    NexusStatusPill(
+                        if (brief.openLoopCount > 0) "${brief.openLoopCount} OPEN" else "CONTEXT",
+                        accent,
+                    )
+                    Text(
+                        "${brief.evidenceCount} evidence",
+                        color = NexusColors.TextMuted,
+                        style = MaterialTheme.typography.labelSmall,
+                    )
+                }
+                Text(brief.title, style = MaterialTheme.typography.titleLarge, fontWeight = FontWeight.Bold)
+
+                Text("CURRENT STATE", color = NexusColors.TextMuted, style = MaterialTheme.typography.labelSmall)
+                ContentText(brief.currentState, maxLines = 4)
+
+                HorizontalDivider(color = NexusColors.BorderSoft)
+                Text("WHAT CHANGED", color = NexusColors.TextMuted, style = MaterialTheme.typography.labelSmall)
+                Text(brief.whatChanged, color = NexusColors.TextSecondary)
+
+                brief.nextStep?.let { next ->
+                    Surface(color = NexusColors.CyanSoft, shape = androidx.compose.foundation.shape.RoundedCornerShape(12.dp)) {
+                        Column(Modifier.padding(12.dp), verticalArrangement = Arrangement.spacedBy(3.dp)) {
+                            Text("NEXT", color = NexusColors.Cyan, style = MaterialTheme.typography.labelSmall, fontWeight = FontWeight.Bold)
+                            Text(next, color = NexusColors.TextPrimary, style = MaterialTheme.typography.bodyMedium)
                         }
                     }
+                }
 
-                    TextButton(onClick = { expanded = if (expanded == situation.id) null else situation.id }) {
-                        Text(if (expanded == situation.id) "Hide evidence" else "See source evidence")
+                if (situation != null && situation.observationIds.isNotEmpty()) {
+                    TextButton(onClick = { expanded = if (expanded == brief.situationId) null else brief.situationId }) {
+                        Text(if (expanded == brief.situationId) "Hide evidence" else "Show evidence")
                     }
-                    if (expanded == situation.id) {
+                    if (expanded == brief.situationId) {
                         state.observations
                             .filter { it.id in situation.observationIds }
                             .sortedByDescending { it.createdAt }
@@ -92,80 +125,11 @@ fun DiscoverScreen(contentPadding: PaddingValues, viewModel: HomeViewModel = hil
                                 ) {
                                     Column(Modifier.fillMaxWidth()) {
                                         ContentText(observation.rawText, maxLines = 3)
-                                        Text(
-                                            timestamp(observation.createdAt),
-                                            color = NexusColors.TextMuted,
-                                            style = MaterialTheme.typography.labelSmall,
-                                        )
+                                        Text(timestamp(observation.createdAt), color = NexusColors.TextMuted, style = MaterialTheme.typography.labelSmall)
                                     }
                                 }
                             }
                     }
-                }
-            }
-        }
-
-        if ((filter == "All" || filter == "Changes") && state.topOfMind.isNotEmpty()) {
-            item {
-                NexusSectionHeader(
-                    title = "What changed",
-                    subtitle = "Current evidence that may change what you do next.",
-                )
-            }
-            items(state.topOfMind.take(5), key = { "change_${it.id}" }) { item ->
-                val accent = when (item.kind) {
-                    SignalKind.PAYMENT, SignalKind.FAILURE -> NexusColors.Amber
-                    SignalKind.REQUEST -> NexusColors.Cyan
-                    SignalKind.APPOINTMENT -> NexusColors.Violet
-                    else -> NexusColors.Mint
-                }
-                NexusCard(accent = accent) {
-                    Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
-                        NexusStatusPill(item.kind.name.replace('_', ' '), accent)
-                        Text(
-                            "${(item.confidence * 100).toInt()}% confidence",
-                            color = NexusColors.TextMuted,
-                            style = MaterialTheme.typography.labelSmall,
-                        )
-                    }
-                    Text(item.title, style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold)
-                    ContentText(item.summary, maxLines = 4)
-                    TextButton(onClick = {
-                        selected = state.observations.firstOrNull { it.id == item.observationId }
-                    }) { Text("View evidence") }
-                }
-            }
-        }
-
-        if ((filter == "All" || filter == "Themes") && state.interests.isNotEmpty()) {
-            item {
-                NexusSectionHeader(
-                    title = "Background themes",
-                    subtitle = "Longer-term context. These are supporting signals, not tasks.",
-                )
-            }
-            items(state.interests.take(6), key = { it.id }) { interest ->
-                NexusCard {
-                    val prominence = interest.affinity.toFloat().coerceIn(0f, 1f)
-                    val accent = if (prominence >= .7f) NexusColors.Violet else NexusColors.Mint
-                    NexusProgressRow(
-                        title = interest.label,
-                        progress = prominence,
-                        detail = "${(prominence * 100).toInt()}% prominence",
-                        accent = accent,
-                    )
-                }
-            }
-        }
-
-        if (state.contextSituations.isEmpty() && state.topOfMind.isEmpty() && state.interests.isEmpty()) {
-            item {
-                NexusCard {
-                    Text("No meaningful connection yet", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold)
-                    Text(
-                        "NEXUS will wait for enough evidence instead of inventing patterns from one notification.",
-                        color = NexusColors.TextSecondary,
-                    )
                 }
             }
         }

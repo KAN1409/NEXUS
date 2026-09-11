@@ -22,7 +22,7 @@ object DatabaseModule {
     @Singleton
     fun database(@ApplicationContext context: Context): NexusDatabase =
         Room.databaseBuilder(context, NexusDatabase::class.java, "nexus.db")
-            .addMigrations(NexusMigrations.MIGRATION_1_2)
+            .addMigrations(NexusMigrations.MIGRATION_1_2, NexusMigrations.MIGRATION_2_3)
             .build()
 
     @Provides

@@ -38,6 +38,24 @@ interface NexusDao {
     @Insert(onConflict = OnConflictStrategy.REPLACE)
     suspend fun upsertSituationMembers(entities: List<SituationMemberEntity>)
 
+    @Insert(onConflict = OnConflictStrategy.REPLACE)
+    suspend fun upsertOpenLoop(entity: OpenLoopEntity)
+
+    @Insert(onConflict = OnConflictStrategy.REPLACE)
+    suspend fun upsertSituationSnapshot(entity: SituationSnapshotEntity)
+
+    @Insert(onConflict = OnConflictStrategy.REPLACE)
+    suspend fun upsertActionExecution(entity: ActionExecutionEntity)
+
+    @Insert(onConflict = OnConflictStrategy.REPLACE)
+    suspend fun upsertMemory(entity: MemoryEntity)
+
+    @Insert(onConflict = OnConflictStrategy.REPLACE)
+    suspend fun upsertKnowledge(entity: KnowledgeEntity)
+
+    @Query("SELECT * FROM entities WHERE id = :id LIMIT 1")
+    suspend fun knowledgeById(id: String): KnowledgeEntity?
+
     @Query("SELECT * FROM observation_understanding ORDER BY priority DESC, analyzedAt DESC")
     fun observeObservationUnderstandings(): Flow<List<ObservationUnderstandingEntity>>
 
@@ -46,6 +64,36 @@ interface NexusDao {
 
     @Query("SELECT * FROM situation_members WHERE situationId = :situationId")
     suspend fun situationMembers(situationId: String): List<SituationMemberEntity>
+
+    @Query("SELECT * FROM open_loops ORDER BY priority DESC, updatedAt DESC")
+    fun observeOpenLoops(): Flow<List<OpenLoopEntity>>
+
+    @Query("SELECT * FROM open_loops ORDER BY priority DESC, updatedAt DESC")
+    suspend fun openLoopsOnce(): List<OpenLoopEntity>
+
+    @Query("SELECT * FROM open_loops WHERE id = :id LIMIT 1")
+    suspend fun openLoopById(id: String): OpenLoopEntity?
+
+    @Query("UPDATE open_loops SET state = :state, snoozedUntil = :snoozedUntil, updatedAt = :updatedAt WHERE id = :id")
+    suspend fun updateOpenLoopState(id: String, state: String, snoozedUntil: Long?, updatedAt: Long)
+
+    @Query("UPDATE open_loops SET state = 'OPEN', snoozedUntil = NULL, updatedAt = :updatedAt WHERE state = 'SNOOZED' AND snoozedUntil IS NOT NULL AND snoozedUntil <= :now")
+    suspend fun wakeSnoozedOpenLoops(now: Long, updatedAt: Long)
+
+    @Query("DELETE FROM open_loops WHERE state NOT IN ('RESOLVED','DISMISSED')")
+    suspend fun clearActiveOpenLoops()
+
+    @Query("DELETE FROM open_loops WHERE id NOT IN (:ids) AND state NOT IN ('RESOLVED','DISMISSED')")
+    suspend fun deleteActiveOpenLoopsNotIn(ids: List<String>)
+
+    @Query("SELECT * FROM situation_snapshots ORDER BY priority DESC, lastUpdatedAt DESC")
+    fun observeSituationSnapshots(): Flow<List<SituationSnapshotEntity>>
+
+    @Query("DELETE FROM situation_snapshots")
+    suspend fun clearSituationSnapshots()
+
+    @Query("SELECT * FROM action_executions ORDER BY createdAt DESC LIMIT :limit")
+    fun observeActionExecutions(limit: Int = 200): Flow<List<ActionExecutionEntity>>
 
     @Query("SELECT * FROM observations ORDER BY createdAt DESC LIMIT :limit")
     fun observeRecentObservations(limit: Int = 100): Flow<List<ObservationEntity>>
@@ -103,7 +151,7 @@ interface NexusDao {
     fun observeInterestCount(): Flow<Int>
 
     @Query("SELECT * FROM observations ORDER BY createdAt DESC LIMIT :limit")
-    suspend fun recentObservationsOnce(limit: Int = 200): List<ObservationEntity>
+    suspend fun recentObservationsOnce(limit: Int = 300): List<ObservationEntity>
 
     @Query("DELETE FROM interests")
     suspend fun clearInterests()

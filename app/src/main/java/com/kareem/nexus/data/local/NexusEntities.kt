@@ -123,3 +123,57 @@ data class SituationMemberEntity(
     val situationId: String,
     val observationId: String,
 )
+
+@Entity(
+    tableName = "open_loops",
+    indices = [Index("state"), Index("kind"), Index("priority"), Index("updatedAt"), Index("situationId")],
+)
+data class OpenLoopEntity(
+    @PrimaryKey val id: String,
+    val observationId: String,
+    val situationId: String?,
+    val kind: String,
+    val title: String,
+    val detail: String,
+    val party: String?,
+    val source: String?,
+    val state: String,
+    val priority: Double,
+    val dueAt: Long?,
+    val snoozedUntil: Long?,
+    val actionsJson: String,
+    val createdAt: Long,
+    val updatedAt: Long,
+)
+
+@Entity(
+    tableName = "situation_snapshots",
+    indices = [Index("priority"), Index("lastUpdatedAt")],
+)
+data class SituationSnapshotEntity(
+    @PrimaryKey val situationId: String,
+    val title: String,
+    val currentState: String,
+    val whatChanged: String,
+    val nextStep: String?,
+    val openLoopCount: Int,
+    val evidenceCount: Int,
+    val priority: Double,
+    val lastUpdatedAt: Long,
+)
+
+@Entity(
+    tableName = "action_executions",
+    indices = [Index("openLoopId"), Index("state"), Index("createdAt")],
+)
+data class ActionExecutionEntity(
+    @PrimaryKey val id: String,
+    val openLoopId: String?,
+    val actionKind: String,
+    val label: String,
+    val payload: String?,
+    val state: String,
+    val message: String?,
+    val createdAt: Long,
+    val completedAt: Long?,
+)

@@ -15,8 +15,11 @@ import androidx.room.RoomDatabase
         ObservationUnderstandingEntity::class,
         SituationEntity::class,
         SituationMemberEntity::class,
+        OpenLoopEntity::class,
+        SituationSnapshotEntity::class,
+        ActionExecutionEntity::class,
     ],
-    version = 2,
+    version = 3,
     exportSchema = true,
 )
 abstract class NexusDatabase : RoomDatabase() {

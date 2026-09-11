@@ -1,22 +1,23 @@
 package com.kareem.nexus.data.repository
 
+import androidx.room.withTransaction
 import com.kareem.nexus.core.model.*
 import com.kareem.nexus.data.local.*
 import com.kareem.nexus.domain.action.ActionLifecyclePolicy
 import com.kareem.nexus.domain.intelligence.ContextIntelligence
 import com.kareem.nexus.domain.intelligence.PersonalIntelligenceEngine
+import com.kareem.nexus.domain.intelligence.UnifiedIntelligenceEngine
 import com.kareem.nexus.domain.repository.NexusRepository
 import java.security.MessageDigest
 import java.util.UUID
-import androidx.room.withTransaction
+import javax.inject.Inject
+import javax.inject.Singleton
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.flow.Flow
+import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.withContext
 import org.json.JSONArray
 import org.json.JSONObject
-import javax.inject.Inject
-import javax.inject.Singleton
-import kotlinx.coroutines.flow.Flow
-import kotlinx.coroutines.flow.map
 
 @Singleton
 class OfflineNexusRepository @Inject constructor(
@@ -24,13 +25,8 @@ class OfflineNexusRepository @Inject constructor(
     private val database: NexusDatabase,
 ) : NexusRepository {
 
-    override fun allObservations(): Flow<List<Observation>> = dao.observeAllObservations().map { rows ->
-        rows.map { Observation(it.id, ObservationType.valueOf(it.type), it.rawText, it.source, it.createdAt) }
-    }
-
-    override fun observations(): Flow<List<Observation>> = dao.observeRecentObservations().map { rows ->
-        rows.map { Observation(it.id, ObservationType.valueOf(it.type), it.rawText, it.source, it.createdAt) }
-    }
+    override fun allObservations(): Flow<List<Observation>> = dao.observeAllObservations().map(::mapObservations)
+    override fun observations(): Flow<List<Observation>> = dao.observeRecentObservations().map(::mapObservations)
 
     override fun interests(): Flow<List<Interest>> = dao.observeTopInterests().map { rows ->
         rows.map { Interest(it.id, it.label, it.affinity, it.momentum, it.confidence, it.updatedAt) }
@@ -40,22 +36,48 @@ class OfflineNexusRepository @Inject constructor(
         rows.map { Discovery(it.id, DiscoveryType.valueOf(it.type), it.title, it.summary, it.whyThis, it.score, it.createdAt) }
     }
 
-    override fun readyActions(): Flow<List<PreparedAction>> = dao.observeReadyActions().map { rows ->
-        rows.map { PreparedAction(it.id, it.title, it.description, ActionState.valueOf(it.state), it.createdAt) }
-    }
-
-    override fun actions(): Flow<List<PreparedAction>> = dao.observeAllActions().map { rows ->
-        rows.map { PreparedAction(it.id, it.title, it.description, ActionState.valueOf(it.state), it.createdAt) }
-    }
+    override fun readyActions(): Flow<List<PreparedAction>> = dao.observeReadyActions().map(::mapActions)
+    override fun actions(): Flow<List<PreparedAction>> = dao.observeAllActions().map(::mapActions)
 
     override fun actionEvents(): Flow<List<ActionEvent>> = dao.observeFeedback().map { rows ->
         rows.mapNotNull { row ->
+            runCatching { ActionEvent(row.id, row.targetId, FeedbackSignal.valueOf(row.signal), row.createdAt) }.getOrNull()
+        }
+    }
+
+    override fun openLoops(): Flow<List<OpenLoop>> = dao.observeOpenLoops().map { rows ->
+        rows.mapNotNull(::mapOpenLoop)
+    }
+
+    override fun situationBriefs(): Flow<List<SituationBrief>> = dao.observeSituationSnapshots().map { rows ->
+        rows.map { row ->
+            SituationBrief(
+                situationId = row.situationId,
+                title = row.title,
+                currentState = row.currentState,
+                whatChanged = row.whatChanged,
+                nextStep = row.nextStep,
+                openLoopCount = row.openLoopCount,
+                evidenceCount = row.evidenceCount,
+                priority = row.priority,
+                lastUpdatedAt = row.lastUpdatedAt,
+            )
+        }
+    }
+
+    override fun actionExecutions(): Flow<List<ActionExecution>> = dao.observeActionExecutions().map { rows ->
+        rows.mapNotNull { row ->
             runCatching {
-                ActionEvent(
+                ActionExecution(
                     id = row.id,
-                    actionId = row.targetId,
-                    signal = FeedbackSignal.valueOf(row.signal),
+                    openLoopId = row.openLoopId,
+                    actionKind = NexusActionKind.valueOf(row.actionKind),
+                    label = row.label,
+                    payload = row.payload,
+                    state = ExecutionState.valueOf(row.state),
+                    message = row.message,
                     createdAt = row.createdAt,
+                    completedAt = row.completedAt,
                 )
             }.getOrNull()
         }
@@ -70,15 +92,7 @@ class OfflineNexusRepository @Inject constructor(
         value: Double = 1.0,
         now: Long = System.currentTimeMillis(),
     ) {
-        dao.addFeedback(
-            FeedbackEntity(
-                id = UUID.randomUUID().toString(),
-                targetId = actionId,
-                signal = signal.name,
-                value = value,
-                createdAt = now,
-            )
-        )
+        dao.addFeedback(FeedbackEntity(UUID.randomUUID().toString(), actionId, signal.name, value, now))
     }
 
     private suspend fun transitionAction(
@@ -89,39 +103,84 @@ class OfflineNexusRepository @Inject constructor(
         val current = dao.actionById(id) ?: return@withTransaction
         val from = runCatching { ActionState.valueOf(current.state) }.getOrNull() ?: return@withTransaction
         if (!ActionLifecyclePolicy.canTransition(from, target)) return@withTransaction
-
         val now = System.currentTimeMillis()
         dao.updateActionState(id, target.name, now)
         recordEvent(id, signal, now = now)
     }
 
-    override suspend fun approveAction(id: String) =
-        transitionAction(id, ActionState.APPROVED, FeedbackSignal.APPROVED)
+    override suspend fun approveAction(id: String) = transitionAction(id, ActionState.APPROVED, FeedbackSignal.APPROVED)
 
     override suspend fun deferAction(id: String) = database.withTransaction {
         val current = dao.actionById(id) ?: return@withTransaction
         val from = runCatching { ActionState.valueOf(current.state) }.getOrNull() ?: return@withTransaction
         if (!ActionLifecyclePolicy.canTransition(from, ActionState.DRAFT)) return@withTransaction
-
         val now = System.currentTimeMillis()
         dao.deferAction(id, now)
         recordEvent(id, FeedbackSignal.DEFERRED, value = 0.5, now = now)
     }
 
-    override suspend fun rejectAction(id: String) =
-        transitionAction(id, ActionState.REJECTED, FeedbackSignal.REJECTED)
+    override suspend fun rejectAction(id: String) = transitionAction(id, ActionState.REJECTED, FeedbackSignal.REJECTED)
+    override suspend fun resolveAction(id: String) = transitionAction(id, ActionState.REJECTED, FeedbackSignal.RESOLVED)
+    override suspend fun startAction(id: String) = transitionAction(id, ActionState.EXECUTING, FeedbackSignal.STARTED)
+    override suspend fun completeAction(id: String) = transitionAction(id, ActionState.COMPLETED, FeedbackSignal.COMPLETED)
+    override suspend fun failAction(id: String) = transitionAction(id, ActionState.FAILED, FeedbackSignal.FAILED)
 
-    override suspend fun resolveAction(id: String) =
-        transitionAction(id, ActionState.REJECTED, FeedbackSignal.RESOLVED)
+    override suspend fun snoozeOpenLoop(id: String, until: Long) = database.withTransaction {
+        val loop = dao.openLoopById(id) ?: return@withTransaction
+        val now = System.currentTimeMillis()
+        dao.updateOpenLoopState(id, OpenLoopState.SNOOZED.name, until, now)
+        val actionId = "action_signal_${loop.observationId}"
+        val action = dao.actionById(actionId)
+        if (action != null) {
+            val from = runCatching { ActionState.valueOf(action.state) }.getOrNull()
+            if (from != null && ActionLifecyclePolicy.canTransition(from, ActionState.DRAFT)) {
+                dao.deferAction(actionId, now)
+                recordEvent(actionId, FeedbackSignal.DEFERRED, 0.5, now)
+            }
+        }
+    }
 
-    override suspend fun startAction(id: String) =
-        transitionAction(id, ActionState.EXECUTING, FeedbackSignal.STARTED)
+    override suspend fun resolveOpenLoop(id: String) = closeOpenLoop(id, OpenLoopState.RESOLVED, FeedbackSignal.RESOLVED)
+    override suspend fun dismissOpenLoop(id: String) = closeOpenLoop(id, OpenLoopState.DISMISSED, FeedbackSignal.DISMISSED)
 
-    override suspend fun completeAction(id: String) =
-        transitionAction(id, ActionState.COMPLETED, FeedbackSignal.COMPLETED)
+    private suspend fun closeOpenLoop(id: String, state: OpenLoopState, signal: FeedbackSignal) = database.withTransaction {
+        val loop = dao.openLoopById(id) ?: return@withTransaction
+        val now = System.currentTimeMillis()
+        dao.updateOpenLoopState(id, state.name, null, now)
+        val actionId = "action_signal_${loop.observationId}"
+        val action = dao.actionById(actionId)
+        if (action != null) {
+            val from = runCatching { ActionState.valueOf(action.state) }.getOrNull()
+            if (from != null && ActionLifecyclePolicy.canTransition(from, ActionState.REJECTED)) {
+                dao.updateActionState(actionId, ActionState.REJECTED.name, now)
+                recordEvent(actionId, signal, now = now)
+            }
+        }
+    }
 
-    override suspend fun failAction(id: String) =
-        transitionAction(id, ActionState.FAILED, FeedbackSignal.FAILED)
+    override suspend fun recordActionExecution(
+        openLoopId: String?,
+        actionKind: NexusActionKind,
+        label: String,
+        payload: String?,
+        state: ExecutionState,
+        message: String?,
+    ) {
+        val now = System.currentTimeMillis()
+        dao.upsertActionExecution(
+            ActionExecutionEntity(
+                id = UUID.randomUUID().toString(),
+                openLoopId = openLoopId,
+                actionKind = actionKind.name,
+                label = label,
+                payload = payload,
+                state = state.name,
+                message = message,
+                createdAt = now,
+                completedAt = now.takeIf { state != ExecutionState.STARTED },
+            )
+        )
+    }
 
     override suspend fun captureObservation(
         type: ObservationType,
@@ -137,23 +196,18 @@ class OfflineNexusRepository @Inject constructor(
             ObservationType.NOTIFICATION -> {
                 val metadata = runCatching { JSONObject(metadataJson) }.getOrNull()
                 val postedAt = metadata?.optLong("postedAt", 0L)?.takeIf { it > 0L }
-                val key = metadata?.optString("key").orEmpty().takeIf { it.isNotBlank() }
+                val key = metadata?.optString("key").orEmpty().takeIf(String::isNotBlank)
                 val eventIdentity = postedAt?.toString() ?: key.orEmpty()
-                if (eventIdentity.isBlank()) {
-                    "${type.name}|${source.orEmpty()}|$clean"
-                } else {
-                    "${type.name}|${source.orEmpty()}|$clean|$eventIdentity"
-                }
+                if (eventIdentity.isBlank()) "${type.name}|${source.orEmpty()}|$clean"
+                else "${type.name}|${source.orEmpty()}|$clean|$eventIdentity"
             }
             else -> "${type.name}|${source.orEmpty()}|$clean"
         }
 
-        val digest = MessageDigest.getInstance("SHA-256")
-            .digest(identity.toByteArray())
-            .joinToString("") { "%02x".format(it) }
-
+        val digest = sha256(identity)
         val existing = dao.observationById(digest)
         if (existing != null && type != ObservationType.APP_USAGE) return@withTransaction
+
         dao.upsertObservation(
             ObservationEntity(
                 id = digest,
@@ -165,10 +219,7 @@ class OfflineNexusRepository @Inject constructor(
                 createdAt = System.currentTimeMillis(),
             )
         )
-
-        if (type == ObservationType.APP_USAGE && source != null) {
-            dao.deleteOtherUsageSnapshots(source, digest)
-        }
+        if (type == ObservationType.APP_USAGE && source != null) dao.deleteOtherUsageSnapshots(source, digest)
     }
 
     override suspend fun pruneUsageSources(sources: List<String>) {
@@ -181,14 +232,11 @@ class OfflineNexusRepository @Inject constructor(
 
     private suspend fun rebuildTransaction() {
         val now = System.currentTimeMillis()
-
         dao.removeDuplicateUsageSnapshots()
         dao.retireLegacyFocusActions(now)
+        dao.wakeSnoozedOpenLoops(now, now)
 
-        val deferred = dao.deferredActionsReadyToResurface(
-            cutoff = now - ActionLifecyclePolicy.DEFER_DURATION_MS,
-        )
-        deferred.forEach { action ->
+        dao.deferredActionsReadyToResurface(now - ActionLifecyclePolicy.DEFER_DURATION_MS).forEach { action ->
             val from = runCatching { ActionState.valueOf(action.state) }.getOrNull()
             if (from == ActionState.DRAFT && ActionLifecyclePolicy.canTransition(from, ActionState.READY_FOR_APPROVAL)) {
                 dao.updateActionState(action.id, ActionState.READY_FOR_APPROVAL.name, now)
@@ -196,199 +244,112 @@ class OfflineNexusRepository @Inject constructor(
             }
         }
 
-        val rows = dao.recentObservationsOnce()
-        val domainRows = rows.mapNotNull { row ->
-            runCatching {
-                Observation(
-                    id = row.id,
-                    type = ObservationType.valueOf(row.type),
-                    rawText = row.rawText,
-                    source = row.source,
-                    createdAt = row.createdAt,
-                )
-            }.getOrNull()
-        }
+        val rows = dao.recentObservationsOnce(300)
+        val observations = mapObservations(rows)
 
-        materializePersonalIntelligence(domainRows, now)
-
-        val scores = linkedMapOf<String, Double>()
-
-        fun add(label: String, weight: Double) {
-            scores[label] = (scores[label] ?: 0.0) + weight
-        }
-
-        rows.forEach { row ->
-            val text = "${row.rawText} ${row.source.orEmpty()}".lowercase()
-            val usageMinutes = if (row.type == ObservationType.APP_USAGE.name) {
-                Regex("""(\d+)\s*min""")
-                    .find(row.rawText)
-                    ?.groupValues
-                    ?.getOrNull(1)
-                    ?.toDoubleOrNull()
-                    ?: 1.0
-            } else {
-                1.0
-            }
-            val usageWeight = (usageMinutes / 30.0).coerceIn(0.35, 3.0)
-
-            when {
-                listOf("whatsapp", "truecaller", "call", "phone", "telegram", "messenger").any(text::contains) ->
-                    add("Communication", usageWeight)
-                listOf("chatgpt", "cortex", "picbrain", "github", "termux", "notion", "docs").any(text::contains) ->
-                    add("AI & productivity", usageWeight)
-                listOf("chrome", "search", "browser", "googlequicksearchbox").any(text::contains) ->
-                    add("Web & research", usageWeight)
-                listOf("instagram", "facebook", "tiktok", "twitter", "reddit").any(text::contains) ->
-                    add("Social", usageWeight)
-                listOf("netflix", "youtube", "music", "spotify", "media").any(text::contains) ->
-                    add("Entertainment", usageWeight)
-                listOf("maps", "uber", "careem", "navigation").any(text::contains) ->
-                    add("Places & mobility", usageWeight)
-                listOf("gallery", "photos", "camera").any(text::contains) ->
-                    add("Photos & media", usageWeight)
-                listOf("talabat", "food", "restaurant").any(text::contains) ->
-                    add("Food", usageWeight)
-                row.type in setOf(
-                    ObservationType.SHARED_LINK.name,
-                    ObservationType.SHARED_TEXT.name,
-                    ObservationType.MANUAL.name,
-                ) -> {
-                    add("Saved context", 1.4)
-                    if (listOf("android", "app", "kotlin", "compose", "code", "github").any(text::contains)) {
-                        add("App development", 1.8)
-                    }
-                    if (listOf("design", "ui", "ux", "icon", "visual").any(text::contains)) {
-                        add("Design", 1.5)
-                    }
-                }
-            }
-        }
-
+        // NEXUS 3 no longer turns usage/theme percentages into a primary product surface.
         dao.clearInterests()
         dao.clearDiscoveries()
 
-        val ranked = scores.entries.sortedByDescending { it.value }.take(6)
-        val maxScore = ranked.maxOfOrNull { it.value } ?: 1.0
-
-        ranked.forEachIndexed { index, entry ->
-            val slug = entry.key.lowercase().replace(Regex("[^a-z0-9]+"), "_").trim('_')
-            val confidence = (entry.value / maxScore).coerceIn(0.25, 1.0)
-            dao.upsertInterest(
-                InterestEntity(
-                    id = "interest_$slug",
-                    label = entry.key,
-                    affinity = confidence,
-                    momentum = (1.0 - index * 0.1).coerceAtLeast(0.35),
-                    confidence = confidence,
-                    saturation = 0.0,
-                    updatedAt = now,
-                )
-            )
+        val situations = materializeUnderstandingAndSituations(observations, now)
+        val observationToSituation = buildMap<String, String> {
+            situations.forEach { situation -> situation.observationIds.forEach { put(it, situation.id) } }
         }
 
-        ranked.take(3).forEach { entry ->
-            val slug = entry.key.lowercase().replace(Regex("[^a-z0-9]+"), "_").trim('_')
-            val supporting = rows
-                .filter { row ->
-                    val t = "${row.rawText} ${row.source.orEmpty()}".lowercase()
-                    when (entry.key) {
-                        "Communication" -> listOf("whatsapp", "truecaller", "call", "phone", "telegram", "messenger").any(t::contains)
-                        "AI & productivity" -> listOf("chatgpt", "cortex", "picbrain", "github", "termux", "notion", "docs").any(t::contains)
-                        "Web & research" -> listOf("chrome", "search", "browser", "googlequicksearchbox").any(t::contains)
-                        "Social" -> listOf("instagram", "facebook", "tiktok", "twitter", "reddit").any(t::contains)
-                        "Entertainment" -> listOf("netflix", "youtube", "music", "spotify", "media").any(t::contains)
-                        "Places & mobility" -> listOf("maps", "uber", "careem", "navigation").any(t::contains)
-                        "Photos & media" -> listOf("gallery", "photos", "camera").any(t::contains)
-                        "Food" -> listOf("talabat", "food", "restaurant").any(t::contains)
-                        "App development" -> listOf("android", "app", "kotlin", "compose", "code", "github").any(t::contains)
-                        "Design" -> listOf("design", "ui", "ux", "icon", "visual").any(t::contains)
-                        else -> row.type != ObservationType.APP_USAGE.name
-                    }
-                }
-                .map { row -> if (row.type == ObservationType.APP_USAGE.name) "usage:${row.source}" else row.id }
-                .distinct()
-                .size
+        val existingLoops = dao.openLoopsOnce().associateBy { it.id }
+        val existingActions = dao.actionsOnce().associateBy { it.id }
+        val materialized = mutableListOf<OpenLoop>()
+        val activeIds = mutableListOf<String>()
 
-            dao.upsertDiscovery(
-                DiscoveryEntity(
-                    id = "discovery_$slug",
-                    type = DiscoveryType.DISCOVERY.name,
-                    title = entry.key,
-                    summary = if (supporting > 1) {
-                        "This theme keeps showing up across your recent context."
-                    } else {
-                        "This theme appeared in your recent context."
-                    },
-                    whyThis = "$supporting recent signal${if (supporting == 1) "" else "s"} contributed.",
-                    sourceUrl = null,
-                    score = entry.value,
-                    dismissed = false,
-                    createdAt = now,
-                )
-            )
-        }
+        observations.filter { it.type != ObservationType.APP_USAGE }.forEach { observation ->
+            val understanding = PersonalIntelligenceEngine.interpret(observation, now)
+            persistMemoryAndEntities(observation, understanding)
+            val candidate = UnifiedIntelligenceEngine.deriveOpenLoop(
+                observation = observation,
+                understanding = understanding,
+                situationId = observationToSituation[observation.id],
+                now = now,
+            ) ?: return@forEach
 
-        val actionable = domainRows
-            .filter { it.type in setOf(ObservationType.NOTIFICATION, ObservationType.MANUAL, ObservationType.SHARED_TEXT) }
-            .filter { it.createdAt >= now - 7L * 24 * 60 * 60 * 1000 }
-            .map { it to PersonalIntelligenceEngine.interpret(it, now) }
-            .filter { (_, understanding) ->
-                !understanding.isNoise &&
-                    understanding.kind != SignalKind.INFORMATION &&
-                    understanding.actions.isNotEmpty() &&
-                    understanding.priority >= 0.45
+            activeIds += candidate.id
+            val existing = existingLoops[candidate.id]
+            val action = existingActions["action_signal_${observation.id}"]
+            val actionState = action?.state?.let { runCatching { ActionState.valueOf(it) }.getOrNull() }
+            val persistedState = when {
+                existing?.state == OpenLoopState.RESOLVED.name -> OpenLoopState.RESOLVED
+                existing?.state == OpenLoopState.DISMISSED.name -> OpenLoopState.DISMISSED
+                existing?.state == OpenLoopState.SNOOZED.name && (existing.snoozedUntil ?: 0L) > now -> OpenLoopState.SNOOZED
+                actionState == ActionState.COMPLETED -> OpenLoopState.RESOLVED
+                actionState == ActionState.REJECTED -> OpenLoopState.DISMISSED
+                else -> candidate.state
             }
+            val persisted = candidate.copy(
+                state = persistedState,
+                snoozedUntil = existing?.snoozedUntil?.takeIf { persistedState == OpenLoopState.SNOOZED },
+                createdAt = existing?.createdAt ?: candidate.createdAt,
+            )
+            dao.upsertOpenLoop(persisted.toEntity())
+            materialized += persisted
 
-        actionable.forEach { (observation, understanding) ->
-            val id = "action_signal_${observation.id}"
-            if (dao.actionById(id) == null && dao.actionById("action_commitment_${observation.id}") == null) {
+            val actionId = "action_signal_${observation.id}"
+            if (dao.actionById(actionId) == null && dao.actionById("action_commitment_${observation.id}") == null) {
                 dao.upsertAction(
                     ActionEntity(
-                        id = id,
-                        title = understanding.title,
-                        description = understanding.summary,
+                        id = actionId,
+                        title = persisted.title,
+                        description = persisted.detail,
                         state = ActionState.READY_FOR_APPROVAL.name,
                         payloadJson = JSONObject()
-                            .put("source", observation.source)
+                            .put("source", persisted.source)
                             .put("observationId", observation.id)
-                            .put("kind", understanding.kind.name)
-                            .put("primaryAction", understanding.actions.firstOrNull()?.kind?.name)
+                            .put("kind", persisted.kind.name)
+                            .put("primaryAction", persisted.actions.firstOrNull()?.kind?.name)
                             .toString(),
                         createdAt = observation.createdAt,
                         updatedAt = now,
                     )
                 )
-                recordEvent(id, FeedbackSignal.SUGGESTED, now = now)
+                recordEvent(actionId, FeedbackSignal.SUGGESTED, now = now)
             }
+        }
+
+        if (activeIds.isEmpty()) dao.clearActiveOpenLoops() else dao.deleteActiveOpenLoopsNotIn(activeIds)
+
+        dao.clearSituationSnapshots()
+        situations.forEach { situation ->
+            val brief = UnifiedIntelligenceEngine.buildSituationBrief(situation, materialized, observations, now)
+            dao.upsertSituationSnapshot(brief.toEntity())
         }
     }
 
-    private suspend fun materializePersonalIntelligence(observations: List<Observation>, now: Long) {
+    private suspend fun materializeUnderstandingAndSituations(
+        observations: List<Observation>,
+        now: Long,
+    ): List<ContextSituation> {
         dao.clearObservationUnderstandings()
         dao.clearSituationMembers()
         dao.clearSituations()
 
-        observations
-            .filter { it.type != ObservationType.APP_USAGE }
-            .forEach { observation ->
-                val understanding = PersonalIntelligenceEngine.interpret(observation, now)
-                dao.upsertObservationUnderstanding(
-                    ObservationUnderstandingEntity(
-                        observationId = observation.id,
-                        kind = understanding.kind.name,
-                        title = understanding.title,
-                        summary = understanding.summary,
-                        factsJson = factsJson(understanding.facts),
-                        actionsJson = actionsJson(understanding.actions),
-                        priority = understanding.priority,
-                        confidence = understanding.confidence,
-                        isNoise = understanding.isNoise,
-                        analyzedAt = understanding.analyzedAt,
-                    )
+        observations.filter { it.type != ObservationType.APP_USAGE }.forEach { observation ->
+            val understanding = PersonalIntelligenceEngine.interpret(observation, now)
+            dao.upsertObservationUnderstanding(
+                ObservationUnderstandingEntity(
+                    observationId = observation.id,
+                    kind = understanding.kind.name,
+                    title = understanding.title,
+                    summary = understanding.summary,
+                    factsJson = factsJson(understanding.facts),
+                    actionsJson = actionsJson(understanding.actions),
+                    priority = understanding.priority,
+                    confidence = understanding.confidence,
+                    isNoise = understanding.isNoise,
+                    analyzedAt = understanding.analyzedAt,
                 )
-            }
+            )
+        }
 
-        PersonalIntelligenceEngine.buildSituations(observations, now = now).forEach { situation ->
+        val situations = PersonalIntelligenceEngine.buildSituations(observations, limit = 20, now = now)
+        situations.forEach { situation ->
             dao.upsertSituation(
                 SituationEntity(
                     id = situation.id,
@@ -404,37 +365,135 @@ class OfflineNexusRepository @Inject constructor(
                     lastUpdatedAt = situation.lastUpdatedAt,
                 )
             )
-            dao.upsertSituationMembers(
-                situation.observationIds.map { observationId ->
-                    SituationMemberEntity(situation.id, observationId)
-                }
-            )
+            dao.upsertSituationMembers(situation.observationIds.map { SituationMemberEntity(situation.id, it) })
         }
+        return situations
+    }
+
+    private suspend fun persistMemoryAndEntities(
+        observation: Observation,
+        understanding: ObservationUnderstanding,
+    ) {
+        dao.upsertMemory(
+            MemoryEntity(
+                id = "memory_${observation.id}",
+                observationId = observation.id,
+                summary = understanding.summary,
+                searchableText = UnifiedIntelligenceEngine.searchableText(observation, understanding),
+                importance = UnifiedIntelligenceEngine.memoryImportance(understanding),
+                createdAt = observation.createdAt,
+            )
+        )
+        understanding.facts
+            .filter { it.kind in setOf(FactKind.PERSON, FactKind.ORGANIZATION, FactKind.PROJECT, FactKind.PLACE, FactKind.LOCATION) }
+            .forEach { fact ->
+                val id = "entity_${sha256("${fact.kind}:${fact.normalizedValue}").take(20)}"
+                val previous = dao.knowledgeById(id)
+                dao.upsertKnowledge(
+                    KnowledgeEntity(
+                        id = id,
+                        type = fact.kind.name,
+                        canonicalName = fact.value,
+                        aliasesJson = previous?.aliasesJson ?: "[]",
+                        firstSeenAt = previous?.firstSeenAt ?: observation.createdAt,
+                        lastSeenAt = maxOf(previous?.lastSeenAt ?: 0L, observation.createdAt),
+                    )
+                )
+            }
+    }
+
+    private fun OpenLoop.toEntity() = OpenLoopEntity(
+        id = id,
+        observationId = observationId,
+        situationId = situationId,
+        kind = kind.name,
+        title = title,
+        detail = detail,
+        party = party,
+        source = source,
+        state = state.name,
+        priority = priority,
+        dueAt = dueAt,
+        snoozedUntil = snoozedUntil,
+        actionsJson = actionsJson(actions),
+        createdAt = createdAt,
+        updatedAt = updatedAt,
+    )
+
+    private fun SituationBrief.toEntity() = SituationSnapshotEntity(
+        situationId = situationId,
+        title = title,
+        currentState = currentState,
+        whatChanged = whatChanged,
+        nextStep = nextStep,
+        openLoopCount = openLoopCount,
+        evidenceCount = evidenceCount,
+        priority = priority,
+        lastUpdatedAt = lastUpdatedAt,
+    )
+
+    private fun mapOpenLoop(row: OpenLoopEntity): OpenLoop? = runCatching {
+        OpenLoop(
+            id = row.id,
+            observationId = row.observationId,
+            situationId = row.situationId,
+            kind = OpenLoopKind.valueOf(row.kind),
+            title = row.title,
+            detail = row.detail,
+            party = row.party,
+            source = row.source,
+            state = OpenLoopState.valueOf(row.state),
+            priority = row.priority,
+            dueAt = row.dueAt,
+            snoozedUntil = row.snoozedUntil,
+            actions = parseActions(row.actionsJson),
+            createdAt = row.createdAt,
+            updatedAt = row.updatedAt,
+        )
+    }.getOrNull()
+
+    private fun mapObservations(rows: List<ObservationEntity>): List<Observation> = rows.mapNotNull { row ->
+        runCatching { Observation(row.id, ObservationType.valueOf(row.type), row.rawText, row.source, row.createdAt) }.getOrNull()
+    }
+
+    private fun mapActions(rows: List<ActionEntity>): List<PreparedAction> = rows.mapNotNull { row ->
+        runCatching { PreparedAction(row.id, row.title, row.description, ActionState.valueOf(row.state), row.createdAt) }.getOrNull()
     }
 
     private fun factsJson(facts: List<ExtractedFact>): String = JSONArray().apply {
         facts.forEach { fact ->
-            put(
-                JSONObject()
-                    .put("kind", fact.kind.name)
-                    .put("value", fact.value)
-                    .put("normalizedValue", fact.normalizedValue)
-                    .put("confidence", fact.confidence)
-            )
+            put(JSONObject().put("kind", fact.kind.name).put("value", fact.value)
+                .put("normalizedValue", fact.normalizedValue).put("confidence", fact.confidence))
         }
     }.toString()
 
     private fun actionsJson(actions: List<ContextAction>): String = JSONArray().apply {
         actions.forEach { action ->
-            put(
-                JSONObject()
-                    .put("kind", action.kind.name)
-                    .put("label", action.label)
-                    .put("payload", action.payload)
-                    .put("requiresApproval", action.requiresApproval)
-            )
+            put(JSONObject().put("kind", action.kind.name).put("label", action.label)
+                .put("payload", action.payload).put("requiresApproval", action.requiresApproval))
         }
     }.toString()
+
+    private fun parseActions(json: String): List<ContextAction> = runCatching {
+        val array = JSONArray(json)
+        buildList {
+            for (index in 0 until array.length()) {
+                val item = array.getJSONObject(index)
+                add(
+                    ContextAction(
+                        kind = NexusActionKind.valueOf(item.getString("kind")),
+                        label = item.optString("label").ifBlank { item.getString("kind") },
+                        payload = item.optString("payload").takeIf { it.isNotBlank() && it != "null" },
+                        requiresApproval = item.optBoolean("requiresApproval", false),
+                    )
+                )
+            }
+        }
+    }.getOrDefault(emptyList())
+
+    private fun sha256(value: String): String = MessageDigest.getInstance("SHA-256")
+        .digest(value.toByteArray())
+        .joinToString("") { "%02x".format(it) }
 
     override suspend fun seedFirstRun() = Unit
 }

@@ -60,4 +60,72 @@ object NexusMigrations {
             db.execSQL("CREATE INDEX IF NOT EXISTS index_situation_members_observationId ON situation_members(observationId)")
         }
     }
+
+    val MIGRATION_2_3 = object : Migration(2, 3) {
+        override fun migrate(db: SupportSQLiteDatabase) {
+            db.execSQL(
+                """
+                CREATE TABLE IF NOT EXISTS open_loops (
+                    id TEXT NOT NULL PRIMARY KEY,
+                    observationId TEXT NOT NULL,
+                    situationId TEXT,
+                    kind TEXT NOT NULL,
+                    title TEXT NOT NULL,
+                    detail TEXT NOT NULL,
+                    party TEXT,
+                    source TEXT,
+                    state TEXT NOT NULL,
+                    priority REAL NOT NULL,
+                    dueAt INTEGER,
+                    snoozedUntil INTEGER,
+                    actionsJson TEXT NOT NULL,
+                    createdAt INTEGER NOT NULL,
+                    updatedAt INTEGER NOT NULL
+                )
+                """.trimIndent()
+            )
+            db.execSQL("CREATE INDEX IF NOT EXISTS index_open_loops_state ON open_loops(state)")
+            db.execSQL("CREATE INDEX IF NOT EXISTS index_open_loops_kind ON open_loops(kind)")
+            db.execSQL("CREATE INDEX IF NOT EXISTS index_open_loops_priority ON open_loops(priority)")
+            db.execSQL("CREATE INDEX IF NOT EXISTS index_open_loops_updatedAt ON open_loops(updatedAt)")
+            db.execSQL("CREATE INDEX IF NOT EXISTS index_open_loops_situationId ON open_loops(situationId)")
+
+            db.execSQL(
+                """
+                CREATE TABLE IF NOT EXISTS situation_snapshots (
+                    situationId TEXT NOT NULL PRIMARY KEY,
+                    title TEXT NOT NULL,
+                    currentState TEXT NOT NULL,
+                    whatChanged TEXT NOT NULL,
+                    nextStep TEXT,
+                    openLoopCount INTEGER NOT NULL,
+                    evidenceCount INTEGER NOT NULL,
+                    priority REAL NOT NULL,
+                    lastUpdatedAt INTEGER NOT NULL
+                )
+                """.trimIndent()
+            )
+            db.execSQL("CREATE INDEX IF NOT EXISTS index_situation_snapshots_priority ON situation_snapshots(priority)")
+            db.execSQL("CREATE INDEX IF NOT EXISTS index_situation_snapshots_lastUpdatedAt ON situation_snapshots(lastUpdatedAt)")
+
+            db.execSQL(
+                """
+                CREATE TABLE IF NOT EXISTS action_executions (
+                    id TEXT NOT NULL PRIMARY KEY,
+                    openLoopId TEXT,
+                    actionKind TEXT NOT NULL,
+                    label TEXT NOT NULL,
+                    payload TEXT,
+                    state TEXT NOT NULL,
+                    message TEXT,
+                    createdAt INTEGER NOT NULL,
+                    completedAt INTEGER
+                )
+                """.trimIndent()
+            )
+            db.execSQL("CREATE INDEX IF NOT EXISTS index_action_executions_openLoopId ON action_executions(openLoopId)")
+            db.execSQL("CREATE INDEX IF NOT EXISTS index_action_executions_state ON action_executions(state)")
+            db.execSQL("CREATE INDEX IF NOT EXISTS index_action_executions_createdAt ON action_executions(createdAt)")
+        }
+    }
 }

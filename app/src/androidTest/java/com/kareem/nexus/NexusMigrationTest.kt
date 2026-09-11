@@ -30,7 +30,7 @@ class NexusMigrationTest {
     }
 
     @Test
-    fun migration1To2_preservesLegacyData_andCreatesIntelligenceTables() {
+    fun migration1To3_preservesLegacyData_andCreatesUnifiedIntelligenceTables() {
         val helper = FrameworkSQLiteOpenHelperFactory().create(
             SupportSQLiteOpenHelper.Configuration.builder(context)
                 .name(dbName)
@@ -47,7 +47,7 @@ class NexusMigrationTest {
         helper.close()
 
         val db = Room.databaseBuilder(context, NexusDatabase::class.java, dbName)
-            .addMigrations(NexusMigrations.MIGRATION_1_2)
+            .addMigrations(NexusMigrations.MIGRATION_1_2, NexusMigrations.MIGRATION_2_3)
             .allowMainThreadQueries()
             .build()
 
@@ -59,6 +59,42 @@ class NexusMigrationTest {
         assertTrue(tableExists(sql, "observation_understanding"))
         assertTrue(tableExists(sql, "situations"))
         assertTrue(tableExists(sql, "situation_members"))
+        assertTrue(tableExists(sql, "open_loops"))
+        assertTrue(tableExists(sql, "situation_snapshots"))
+        assertTrue(tableExists(sql, "action_executions"))
+        db.close()
+    }
+
+    @Test
+    fun migration2To3_preservesV2Intelligence() {
+        val helper = FrameworkSQLiteOpenHelperFactory().create(
+            SupportSQLiteOpenHelper.Configuration.builder(context)
+                .name(dbName)
+                .callback(object : SupportSQLiteOpenHelper.Callback(2) {
+                    override fun onCreate(db: SupportSQLiteDatabase) {
+                        createVersion1Schema(db)
+                        NexusMigrations.MIGRATION_1_2.migrate(db)
+                    }
+                    override fun onUpgrade(db: SupportSQLiteDatabase, oldVersion: Int, newVersion: Int) = Unit
+                })
+                .build()
+        )
+        helper.writableDatabase.execSQL(
+            "INSERT INTO situations(id,title,summary,kind,state,factsJson,actionsJson,priority,confidence,createdAt,lastUpdatedAt) VALUES(?,?,?,?,?,?,?,?,?,?,?)",
+            arrayOf<Any?>("s1", "CIB", "Payment thread", "PURCHASE", "OPEN", "[]", "[]", .9, .8, 100L, 200L),
+        )
+        helper.close()
+
+        val db = Room.databaseBuilder(context, NexusDatabase::class.java, dbName)
+            .addMigrations(NexusMigrations.MIGRATION_2_3)
+            .allowMainThreadQueries()
+            .build()
+        val sql = db.openHelper.writableDatabase
+        sql.query("SELECT title FROM situations WHERE id='s1'").use { cursor ->
+            assertTrue(cursor.moveToFirst())
+            assertEquals("CIB", cursor.getString(0))
+        }
+        assertTrue(tableExists(sql, "open_loops"))
         db.close()
     }
 
@@ -68,23 +104,17 @@ class NexusMigrationTest {
     private fun createVersion1Schema(db: SupportSQLiteDatabase) {
         db.execSQL("CREATE TABLE IF NOT EXISTS observations (id TEXT NOT NULL, type TEXT NOT NULL, rawText TEXT NOT NULL, normalizedText TEXT NOT NULL, source TEXT, metadataJson TEXT NOT NULL, createdAt INTEGER NOT NULL, PRIMARY KEY(id))")
         db.execSQL("CREATE INDEX IF NOT EXISTS index_observations_createdAt ON observations(createdAt)")
-
         db.execSQL("CREATE TABLE IF NOT EXISTS interests (id TEXT NOT NULL, label TEXT NOT NULL, affinity REAL NOT NULL, momentum REAL NOT NULL, confidence REAL NOT NULL, saturation REAL NOT NULL, updatedAt INTEGER NOT NULL, PRIMARY KEY(id))")
         db.execSQL("CREATE INDEX IF NOT EXISTS index_interests_updatedAt ON interests(updatedAt)")
-
         db.execSQL("CREATE TABLE IF NOT EXISTS entities (id TEXT NOT NULL, type TEXT NOT NULL, canonicalName TEXT NOT NULL, aliasesJson TEXT NOT NULL, firstSeenAt INTEGER NOT NULL, lastSeenAt INTEGER NOT NULL, PRIMARY KEY(id))")
-
         db.execSQL("CREATE TABLE IF NOT EXISTS memories (id TEXT NOT NULL, observationId TEXT NOT NULL, summary TEXT NOT NULL, searchableText TEXT NOT NULL, importance REAL NOT NULL, createdAt INTEGER NOT NULL, PRIMARY KEY(id))")
         db.execSQL("CREATE INDEX IF NOT EXISTS index_memories_createdAt ON memories(createdAt)")
-
         db.execSQL("CREATE TABLE IF NOT EXISTS discoveries (id TEXT NOT NULL, type TEXT NOT NULL, title TEXT NOT NULL, summary TEXT NOT NULL, whyThis TEXT NOT NULL, sourceUrl TEXT, score REAL NOT NULL, dismissed INTEGER NOT NULL, createdAt INTEGER NOT NULL, PRIMARY KEY(id))")
         db.execSQL("CREATE INDEX IF NOT EXISTS index_discoveries_score ON discoveries(score)")
         db.execSQL("CREATE INDEX IF NOT EXISTS index_discoveries_createdAt ON discoveries(createdAt)")
-
         db.execSQL("CREATE TABLE IF NOT EXISTS actions (id TEXT NOT NULL, title TEXT NOT NULL, description TEXT NOT NULL, state TEXT NOT NULL, payloadJson TEXT NOT NULL, createdAt INTEGER NOT NULL, updatedAt INTEGER NOT NULL, PRIMARY KEY(id))")
         db.execSQL("CREATE INDEX IF NOT EXISTS index_actions_state ON actions(state)")
         db.execSQL("CREATE INDEX IF NOT EXISTS index_actions_createdAt ON actions(createdAt)")
-
         db.execSQL("CREATE TABLE IF NOT EXISTS feedback (id TEXT NOT NULL, targetId TEXT NOT NULL, signal TEXT NOT NULL, value REAL NOT NULL, createdAt INTEGER NOT NULL, PRIMARY KEY(id))")
         db.execSQL("CREATE INDEX IF NOT EXISTS index_feedback_targetId ON feedback(targetId)")
         db.execSQL("CREATE INDEX IF NOT EXISTS index_feedback_createdAt ON feedback(createdAt)")

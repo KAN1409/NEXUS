@@ -100,13 +100,27 @@ class HomeViewModel @Inject constructor(
             .filter { it.state in setOf(OpenLoopState.OPEN, OpenLoopState.WAITING) }
             .sortedWith(compareByDescending<OpenLoop> { it.priority }.thenBy { it.dueAt ?: Long.MAX_VALUE })
 
-        val needsYou = activeLoops.filter {
+        // A burst of related evidence is one real-world situation, not several things for the user
+        // to deal with. Keep every loop in persistence/history, but surface only the strongest loop
+        // from each connected situation on Home. Standalone loops remain independent.
+        val surfacedLoops = activeLoops
+            .groupBy { it.situationId ?: it.id }
+            .values
+            .mapNotNull { group ->
+                group.maxWithOrNull(
+                    compareBy<OpenLoop> { it.priority }
+                        .thenByDescending { it.updatedAt }
+                )
+            }
+            .sortedWith(compareByDescending<OpenLoop> { it.priority }.thenBy { it.dueAt ?: Long.MAX_VALUE })
+
+        val needsYou = surfacedLoops.filter {
             it.kind !in setOf(OpenLoopKind.WAITING_ON, OpenLoopKind.DELIVERY, OpenLoopKind.UPCOMING)
         }.take(5)
-        val waitingOn = activeLoops.filter {
+        val waitingOn = surfacedLoops.filter {
             it.kind in setOf(OpenLoopKind.WAITING_ON, OpenLoopKind.DELIVERY)
         }.take(5)
-        val upcoming = activeLoops.filter { it.kind == OpenLoopKind.UPCOMING }
+        val upcoming = surfacedLoops.filter { it.kind == OpenLoopKind.UPCOMING }
             .sortedBy { it.dueAt ?: Long.MAX_VALUE }
             .take(5)
 
@@ -126,7 +140,7 @@ class HomeViewModel @Inject constructor(
             interests = legacyState.interests,
             discoveries = legacyState.discoveries,
             actions = visibleActions,
-            readyActionCount = activeLoops.size,
+            readyActionCount = surfacedLoops.size,
             attention = attention,
             situations = legacySituations,
             topOfMind = topOfMind,

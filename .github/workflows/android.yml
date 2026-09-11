@@ -1,33 +1,53 @@
 name: Android CI
+
 on:
   push:
   pull_request:
+  workflow_dispatch:
+
 permissions:
   contents: read
+
 concurrency:
   group: nexus-ci-${{ github.ref }}
   cancel-in-progress: true
+
 jobs:
   build:
     runs-on: ubuntu-latest
     timeout-minutes: 25
     steps:
       - uses: actions/checkout@v4
+
       - uses: actions/setup-java@v5
         with:
           distribution: temurin
           java-version: '17'
           cache: gradle
+
       - uses: gradle/actions/setup-gradle@v4
         with:
           gradle-version: '9.6.0'
-      - run: gradle :app:testDebugUnitTest :app:assembleDebug :app:assembleDebugAndroidTest --stacktrace
+
+      # FAST GATE — runs on every development push. It catches product/unit regressions,
+      # Kotlin/Compose test compile failures, and proves the APK still assembles without
+      # paying the emulator boot cost on every small iteration.
+      - name: Fast gate — unit tests + APK + androidTest compile
+        run: gradle :app:testDebugUnitTest :app:assembleDebug :app:assembleDebugAndroidTest --stacktrace
+
+      # FULL GATE — deliberately expensive. Run only on main, workflow_dispatch, or a
+      # candidate commit whose message contains [full]. This keeps normal iteration fast
+      # while preserving one strict real-Android gate before release.
       - name: Enable emulator acceleration
+        if: ${{ github.ref == 'refs/heads/main' || github.event_name == 'workflow_dispatch' || (github.event_name == 'push' && contains(github.event.head_commit.message, '[full]')) }}
         run: |
           echo 'KERNEL=="kvm", GROUP="kvm", MODE="0666", OPTIONS+="static_node=kvm"' | sudo tee /etc/udev/rules.d/99-kvm4all.rules
           sudo udevadm control --reload-rules
           sudo udevadm trigger --name-match=kvm
-      - uses: reactivecircus/android-emulator-runner@v2
+
+      - name: Full Android acceptance
+        if: ${{ github.ref == 'refs/heads/main' || github.event_name == 'workflow_dispatch' || (github.event_name == 'push' && contains(github.event.head_commit.message, '[full]')) }}
+        uses: reactivecircus/android-emulator-runner@v2
         with:
           api-level: 35
           arch: x86_64
@@ -37,13 +57,16 @@ jobs:
             gradle :app:connectedDebugAndroidTest --stacktrace
             mkdir -p screenshots
             adb pull /sdcard/Download/NEXUS-test-screenshots/. screenshots/
+
       - name: Upload validation APK
+        if: ${{ success() && (github.ref == 'refs/heads/main' || github.event_name == 'workflow_dispatch' || (github.event_name == 'push' && contains(github.event.head_commit.message, '[full]'))) }}
         uses: actions/upload-artifact@v4
         with:
           name: NEXUS-3.0-validation
           path: app/build/outputs/apk/debug/app-debug.apk
-      - name: Upload test reports
-        if: always()
+
+      - name: Upload diagnostic reports
+        if: ${{ failure() || github.ref == 'refs/heads/main' || github.event_name == 'workflow_dispatch' || (github.event_name == 'push' && contains(github.event.head_commit.message, '[full]')) }}
         uses: actions/upload-artifact@v4
         with:
           name: NEXUS-3.0-test-reports

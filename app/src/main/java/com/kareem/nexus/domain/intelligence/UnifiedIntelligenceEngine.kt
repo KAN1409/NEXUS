@@ -12,6 +12,11 @@ object UnifiedIntelligenceEngine {
         "waiting for", "awaiting", "pending from", "still waiting", "waiting on",
         "منتظر", "مستني", "في انتظار", "لسه مستني", "بانتظار", "معلق عند",
     )
+    private val nonPartyTerms = listOf(
+        "please", "payment", "appointment", "meeting", "failed", "couldn't", "cannot", "error",
+        "waiting", "follow up", "reminder", "delivery", "send", "confirm", "reply",
+        "يرجى", "برجاء", "دفع", "سداد", "موعد", "اجتماع", "فشل", "خطأ", "مستني", "منتظر", "ابعت", "ارسل", "رد", "اكد",
+    )
 
     fun deriveOpenLoop(
         observation: Observation,
@@ -23,9 +28,10 @@ object UnifiedIntelligenceEngine {
 
         val normalized = ContextIntelligence.normalize(observation.rawText)
         val waiting = containsAny(normalized, waitingTerms)
-        val party = understanding.facts.firstOrNull { it.kind in setOf(FactKind.ORGANIZATION, FactKind.PERSON) }?.value
-        val amount = understanding.facts.firstOrNull { it.kind == FactKind.AMOUNT }?.value
-        val currency = understanding.facts.firstOrNull { it.kind == FactKind.CURRENCY }?.value
+        val party = reliableParty(understanding.facts) ?: inferPartyFromText(observation.rawText)
+        val explicitMoney = extractExplicitMoney(observation.rawText)
+        val amount = explicitMoney?.first ?: understanding.facts.firstOrNull { it.kind == FactKind.AMOUNT }?.value
+        val currency = explicitMoney?.second ?: understanding.facts.firstOrNull { it.kind == FactKind.CURRENCY }?.value
         val dueAt = dueAt(observation.rawText, now)
         val kind = when (understanding.kind) {
             SignalKind.REQUEST -> if (waiting) OpenLoopKind.WAITING_ON else OpenLoopKind.NEEDS_REPLY
@@ -61,6 +67,14 @@ object UnifiedIntelligenceEngine {
         val sourceActions = understanding.actions
             .filterNot { action ->
                 action.kind in setOf(NexusActionKind.OPEN_SOURCE, NexusActionKind.REPLY, NexusActionKind.RETRY) && !hasLaunchableSource
+            }
+            .map { action ->
+                when (action.kind) {
+                    NexusActionKind.OPEN_SOURCE -> action.copy(label = party?.let { "Open $it" } ?: "Open app")
+                    NexusActionKind.REPLY -> action.copy(label = "Open message")
+                    NexusActionKind.RETRY -> action.copy(label = "Review failure")
+                    else -> action
+                }
             }
             .sortedBy { action ->
                 when {
@@ -179,6 +193,49 @@ object UnifiedIntelligenceEngine {
         }
     }
 
+    private fun reliableParty(facts: List<ExtractedFact>): String? = facts
+        .firstOrNull { it.kind in setOf(FactKind.ORGANIZATION, FactKind.PERSON) }
+        ?.value
+        ?.trim()
+        ?.takeIf(::looksLikeParty)
+
+    private fun inferPartyFromText(text: String): String? {
+        val prefix = text.split(Regex("\\s+[—–-]\\s+|:"), limit = 2).firstOrNull()?.trim().orEmpty()
+        if (looksLikeParty(prefix)) return prefix
+
+        val fromMatch = Regex("(?iu)(?:\\bfrom\\b|من)\\s+([\\p{L}][\\p{L} .'-]{1,32})").find(text)
+        return fromMatch?.groupValues?.getOrNull(1)
+            ?.trim()
+            ?.trimEnd('.', ',', '،', '!', '?')
+            ?.takeIf(::looksLikeParty)
+    }
+
+    private fun looksLikeParty(value: String): Boolean {
+        val clean = value.trim()
+        if (clean.length !in 2..36 || !clean.any(Char::isLetter)) return false
+        if (clean.split(Regex("\\s+")).size > 4) return false
+        val normalized = ContextIntelligence.normalize(clean)
+        return !containsAny(normalized, nonPartyTerms)
+    }
+
+    private fun extractExplicitMoney(text: String): Pair<String, String>? {
+        val after = Regex("(?iu)([0-9٠-٩][0-9٠-٩,.]{0,14})\\s*(EGP|LE|ج\\.?م|جنيه(?:ات)?)").find(text)
+        val before = Regex("(?iu)(EGP|LE|ج\\.?م|جنيه(?:ات)?)\\s*([0-9٠-٩][0-9٠-٩,.]{0,14})").find(text)
+        val raw = when {
+            after != null -> after.groupValues[1]
+            before != null -> before.groupValues[2]
+            else -> return null
+        }
+        val currencyToken = when {
+            after != null -> after.groupValues[2]
+            else -> before!!.groupValues[1]
+        }
+        val amount = normalizeDigits(raw).replace(",", "")
+        if (amount.toDoubleOrNull() == null) return null
+        val currency = if (currencyToken.isNotBlank()) "EGP" else return null
+        return amount to currency
+    }
+
     private fun relativeAge(timestamp: Long, now: Long): String {
         val minutes = ChronoUnit.MINUTES.between(Instant.ofEpochMilli(timestamp), Instant.ofEpochMilli(now)).coerceAtLeast(0)
         return when {
@@ -188,6 +245,13 @@ object UnifiedIntelligenceEngine {
             else -> "${minutes / (24 * 60)}d ago"
         }
     }
+
+    private fun normalizeDigits(value: String): String = value.map { c ->
+        when (c) {
+            in '٠'..'٩' -> ('0'.code + (c - '٠')).toChar()
+            else -> c
+        }
+    }.joinToString("")
 
     private fun containsAny(text: String, terms: List<String>): Boolean =
         terms.any { text.contains(ContextIntelligence.normalize(it)) }

@@ -146,6 +146,44 @@ class OfflineNexusRepository @Inject constructor(
                     createdAt = now - index,
                 )
             )
+
+        dao.clearGeneratedActions()
+
+        val commitmentSignals = rows
+            .filter { it.type == ObservationType.NOTIFICATION.name }
+            .filter { row ->
+                val t = row.rawText.lowercase()
+                listOf("appointment", "tomorrow", "reminder", "موعد", "غداً", "غدا", "بكره", "بكرة").any(t::contains)
+            }
+            .take(2)
+
+        commitmentSignals.forEachIndexed { index, row ->
+            dao.upsertAction(
+                ActionEntity(
+                    id = "action_commitment_$index",
+                    title = "Review upcoming commitment",
+                    description = row.rawText.take(180),
+                    state = ActionState.READY_FOR_APPROVAL.name,
+                    payloadJson = "{}",
+                    createdAt = now - 100 - index,
+                    updatedAt = now - 100 - index,
+                )
+            )
+        }
+
+        ranked.firstOrNull()?.let { top ->
+            dao.upsertAction(
+                ActionEntity(
+                    id = "action_focus_" + top.key.lowercase().replace(Regex("[^a-z0-9]+"), "_"),
+                    title = "Review " + top.key,
+                    description = "NEXUS detected this as your strongest recent pattern and prepared it for review.",
+                    state = ActionState.READY_FOR_APPROVAL.name,
+                    payloadJson = "{}",
+                    createdAt = now - 200,
+                    updatedAt = now - 200,
+                )
+            )
+        }
         }
     }
 

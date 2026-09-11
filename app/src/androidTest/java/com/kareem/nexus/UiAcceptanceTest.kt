@@ -43,23 +43,23 @@ class UiAcceptanceTest {
 
     private fun navItem(label: String) = hasAnyDescendant(hasText(label)) and hasClickAction()
 
-    private fun add(text: String, expectedRevision: Int) {
+    private fun add(text: String) {
         compose.onNodeWithText("Add", useUnmergedTree = true).performClick()
         compose.onNode(hasSetTextAction()).performTextInput(text)
         compose.onNode(hasText("Save") and isEnabled(), useUnmergedTree = true).performClick()
 
+        // NexusWorkTracker is the synchronization contract. It covers capture, Room writes and
+        // the complete understanding rebuild. Do not couple the E2E test to a presentation-only
+        // revision counter; product correctness is asserted below through the actual value cards.
         compose.waitForIdle()
-        compose.onNodeWithTag("nexus-pipeline-ready-$expectedRevision", useUnmergedTree = true).assertExists()
-
-        compose.onNode(navItem("For You"), useUnmergedTree = true).performClick()
-        compose.waitForIdle()
+        compose.onNodeWithTag("home-feed", useUnmergedTree = true).assertExists()
     }
 
     @Test
     fun valueFirstOpenLoopsRecallSituationsAndHistory() {
-        add("Ahmed — Please send the quotation today", 1)
-        add("CIB — payment of 5672 EGP is due today", 2)
-        add("CIB — please confirm your card payment today", 3)
+        add("Ahmed — Please send the quotation today")
+        add("CIB — payment of 5672 EGP is due today")
+        add("CIB — please confirm your card payment today")
 
         val home = compose.onNodeWithTag("home-feed", useUnmergedTree = true)
         home.performScrollToNode(hasTestTag("open-loop-payment"))

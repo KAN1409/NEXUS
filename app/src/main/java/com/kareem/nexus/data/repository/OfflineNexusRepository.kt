@@ -3,6 +3,7 @@ package com.kareem.nexus.data.repository
 import com.kareem.nexus.core.model.*
 import com.kareem.nexus.data.local.*
 import com.kareem.nexus.domain.action.ActionLifecyclePolicy
+import com.kareem.nexus.domain.intelligence.ContextIntelligence
 import com.kareem.nexus.domain.repository.NexusRepository
 import java.security.MessageDigest
 import javax.inject.Inject
@@ -151,6 +152,7 @@ class OfflineNexusRepository @Inject constructor(
         val now = System.currentTimeMillis()
 
         dao.removeDuplicateUsageSnapshots()
+        dao.retireLegacyFocusActions(now)
 
         val deferred = dao.deferredActionsReadyToResurface(
             cutoff = now - ActionLifecyclePolicy.DEFER_DURATION_MS,
@@ -283,47 +285,29 @@ class OfflineNexusRepository @Inject constructor(
             )
         }
 
-        val commitmentSignals = rows
+        val actionableNotifications = rows
             .filter { it.type == ObservationType.NOTIFICATION.name }
-            .filter { row ->
-                val t = row.rawText.lowercase()
-                listOf(
-                    "appointment", "tomorrow", "reminder",
-                    "موعد", "غداً", "غدا", "بكره", "بكرة",
-                ).any(t::contains)
+            .mapNotNull { row ->
+                ContextIntelligence.suggestedActionFor(row.rawText)?.let { suggestion ->
+                    Triple(row, suggestion.first, suggestion.second)
+                }
             }
-            .take(2)
+            .take(6)
 
-        commitmentSignals.forEach { row ->
-            val id = "action_commitment_${row.id}"
+        actionableNotifications.forEach { item ->
+            val row = item.first
+            val title = item.second
+            val description = item.third
+            val id = "action_signal_" + row.id
             if (dao.actionById(id) == null) {
                 dao.upsertAction(
                     ActionEntity(
                         id = id,
-                        title = "Review upcoming commitment",
-                        description = row.rawText.take(180),
+                        title = title,
+                        description = description,
                         state = ActionState.READY_FOR_APPROVAL.name,
-                        payloadJson = "{}",
+                        payloadJson = "{\"source\":\"" + row.source.orEmpty().replace("\"", "") + "\"}",
                         createdAt = row.createdAt,
-                        updatedAt = now,
-                    )
-                )
-                recordEvent(id, FeedbackSignal.SUGGESTED, now = now)
-            }
-        }
-
-        ranked.firstOrNull()?.let { top ->
-            val slug = top.key.lowercase().replace(Regex("[^a-z0-9]+"), "_").trim('_')
-            val id = "action_focus_$slug"
-            if (dao.actionById(id) == null) {
-                dao.upsertAction(
-                    ActionEntity(
-                        id = id,
-                        title = "Review ${top.key}",
-                        description = "NEXUS detected this as your strongest recent pattern and prepared it for review.",
-                        state = ActionState.READY_FOR_APPROVAL.name,
-                        payloadJson = "{}",
-                        createdAt = now,
                         updatedAt = now,
                     )
                 )

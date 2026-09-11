@@ -3,6 +3,7 @@ package com.kareem.nexus.ui
 import android.content.Intent
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
+import com.kareem.nexus.core.NexusWorkTracker
 import com.kareem.nexus.core.model.ObservationType
 import com.kareem.nexus.domain.repository.NexusRepository
 import com.kareem.nexus.ingest.ShareIngestor
@@ -43,6 +44,7 @@ class CaptureViewModel @Inject constructor(
 
     private fun runOperation(block: suspend () -> String?) {
         pendingOperations.incrementAndGet()
+        NexusWorkTracker.begin()
         _state.update { it.copy(busy = true) }
 
         viewModelScope.launch {
@@ -63,6 +65,7 @@ class CaptureViewModel @Inject constructor(
                 if (pendingOperations.decrementAndGet() == 0) {
                     _state.update { it.copy(busy = false) }
                 }
+                NexusWorkTracker.end()
             }
         }
     }
@@ -89,8 +92,6 @@ class CaptureViewModel @Inject constructor(
                 "NEXUS",
             )
             repository.rebuildUnderstanding()
-            // A revision means the complete local intelligence pipeline finished, not merely that
-            // the raw row was inserted. This gives UI/automation a deterministic committed state.
             markProcessedSave()
             "Saved to Memory"
         }

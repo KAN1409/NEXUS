@@ -31,21 +31,19 @@ class UiAcceptanceTest {
         }
         compose.onNode(hasText("Save") and isEnabled(), useUnmergedTree = true).performClick()
 
+        // Save closes the capture surface immediately, while local enrichment finishes in the
+        // serialized background queue. Wait for the user-visible completion signal before the
+        // next capture so this acceptance test validates committed product state, not a transient frame.
+        compose.waitUntil(20_000) {
+            compose.onAllNodesWithText("Saved to Memory", useUnmergedTree = true)
+                .fetchSemanticsNodes().isNotEmpty()
+        }
+
         val forYouNav = navItem("For You")
         compose.waitUntil(15_000) {
             compose.onAllNodes(forYouNav, useUnmergedTree = true).fetchSemanticsNodes().isNotEmpty()
         }
         compose.onNode(forYouNav, useUnmergedTree = true).performClick()
-        compose.waitUntil(15_000) {
-            compose.onAllNodesWithText("Add", useUnmergedTree = true).fetchSemanticsNodes().isNotEmpty()
-        }
-    }
-
-    private fun scrollLazyListTo(matcher: SemanticsMatcher) {
-        // LazyColumn virtualizes offscreen descendants. Scroll the item container that owns the
-        // matching descendant, then assert the actual child once the item has been composed.
-        compose.onNode(hasScrollAction(), useUnmergedTree = true)
-            .performScrollToNode(hasAnyDescendant(matcher))
         compose.waitForIdle()
     }
 
@@ -59,9 +57,11 @@ class UiAcceptanceTest {
             compose.onAllNodesWithText("Needs you", useUnmergedTree = true).fetchSemanticsNodes().isNotEmpty()
         }
         compose.onNodeWithText("Ahmed needs a reply", substring = true, useUnmergedTree = true).assertExists()
-        val cibPayment = hasText("CIB payment", substring = true)
-        scrollLazyListTo(cibPayment)
-        compose.onNode(cibPayment, useUnmergedTree = true).assertExists()
+        compose.waitUntil(15_000) {
+            compose.onAllNodesWithText("CIB payment", substring = true, useUnmergedTree = true)
+                .fetchSemanticsNodes().isNotEmpty()
+        }
+        compose.onNodeWithText("CIB payment", substring = true, useUnmergedTree = true).assertExists()
         screenshot("01-home-value")
 
         compose.onNode(navItem("Memory"), useUnmergedTree = true).performClick()

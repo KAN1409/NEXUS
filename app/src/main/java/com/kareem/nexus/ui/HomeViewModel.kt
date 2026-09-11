@@ -5,6 +5,7 @@ import androidx.lifecycle.viewModelScope
 import com.kareem.nexus.core.model.Discovery
 import com.kareem.nexus.core.model.Interest
 import com.kareem.nexus.core.model.Observation
+import com.kareem.nexus.core.model.PreparedAction
 import com.kareem.nexus.domain.repository.NexusRepository
 import dagger.hilt.android.lifecycle.HiltViewModel
 import kotlinx.coroutines.flow.SharingStarted
@@ -19,19 +20,20 @@ data class HomeUiState(
     val observations: List<Observation> = emptyList(),
     val interests: List<Interest> = emptyList(),
     val discoveries: List<Discovery> = emptyList(),
+    val actions: List<PreparedAction> = emptyList(),
     val readyActionCount: Int = 0,
 )
 
 @HiltViewModel
 class HomeViewModel @Inject constructor(
-    private val repository: NexusRepository,
+    repository: NexusRepository,
 ) : ViewModel() {
     val uiState: StateFlow<HomeUiState> = combine(
         repository.observationCount(),
         repository.observations(),
         repository.interests(),
         repository.discoveries(),
-        repository.readyActions(),
+        repository.actions(),
     ) { observationCount, observations, interests, discoveries, actions ->
         HomeUiState(
             observationCount = observationCount,
@@ -39,7 +41,8 @@ class HomeViewModel @Inject constructor(
             observations = observations,
             interests = interests,
             discoveries = discoveries,
-            readyActionCount = actions.size,
+            actions = actions,
+            readyActionCount = actions.count { it.state.name == "READY_FOR_APPROVAL" },
         )
     }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), HomeUiState())
 }

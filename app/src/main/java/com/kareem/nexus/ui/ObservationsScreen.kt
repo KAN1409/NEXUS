@@ -10,11 +10,13 @@ import androidx.compose.runtime.*
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.hilt.lifecycle.viewmodel.compose.hiltViewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.kareem.nexus.core.model.Observation
-import com.kareem.nexus.ui.design.NexusColors
+import com.kareem.nexus.core.model.ObservationType
+import com.kareem.nexus.ui.design.*
 
 @Composable
 fun ObservationsScreen(contentPadding: PaddingValues, viewModel: MemoryViewModel = hiltViewModel()) {
@@ -24,37 +26,127 @@ fun ObservationsScreen(contentPadding: PaddingValues, viewModel: MemoryViewModel
     var selected by remember { mutableStateOf<Observation?>(null) }
     var visible by rememberSaveable(query, filter) { mutableIntStateOf(50) }
     val context = LocalContext.current
-    LazyColumn(Modifier.fillMaxSize().padding(contentPadding), contentPadding = PaddingValues(20.dp, 24.dp, 20.dp, 100.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
+
+    LazyColumn(
+        modifier = Modifier.fillMaxSize().padding(contentPadding),
+        contentPadding = PaddingValues(18.dp, 22.dp, 18.dp, 104.dp),
+        verticalArrangement = Arrangement.spacedBy(12.dp),
+    ) {
         item {
-            Text("Memory", style = MaterialTheme.typography.headlineLarge)
-            Text("Find the detail you remember.", color = NexusColors.TextSecondary)
-            Spacer(Modifier.height(16.dp))
-            OutlinedTextField(query, onValueChange = { viewModel.query.value = it }, modifier = Modifier.fillMaxWidth(), singleLine = true,
-                label = { Text("Search saved context") }, trailingIcon = {
-                    if (query.isNotEmpty()) TextButton(onClick = { viewModel.query.value = "" }) { Text("Clear") }
-                })
+            NexusScreenHeader(
+                title = "Memory",
+                subtitle = "Everything NEXUS has observed and saved.",
+            )
+            Spacer(Modifier.height(14.dp))
+            OutlinedTextField(
+                value = query,
+                onValueChange = { viewModel.query.value = it },
+                modifier = Modifier.fillMaxWidth(),
+                singleLine = true,
+                label = { Text("Search memory") },
+                placeholder = { Text("Person, topic, app, phrase or idea") },
+                trailingIcon = {
+                    if (query.isNotEmpty()) {
+                        TextButton(onClick = { viewModel.query.value = "" }) { Text("Clear") }
+                    }
+                },
+            )
         }
+
         item {
             LazyRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                items(MemoryFilter.entries) { item -> FilterChip(filter == item, onClick = { viewModel.filter.value = item }, label = { Text(item.label) }) }
-            }
-        }
-        item { Text("${state.rows.size} results · ${state.total} saved", style = MaterialTheme.typography.labelMedium, color = NexusColors.TextSecondary) }
-        state.error?.let { message -> item { Text(message, color = NexusColors.Rose) } }
-        if (state.rows.isEmpty()) item {
-            Text(if (state.total == 0) "Tap Add or share text, a link or an image to NEXUS to start your memory." else "No matches. Try fewer words or another filter.", modifier = Modifier.padding(vertical = 24.dp), color = NexusColors.TextSecondary)
-        }
-        items(state.rows.take(visible), key = Observation::id) { row ->
-            val label = remember(row.source) { sourceLabel(context, row.source) }
-            Surface(Modifier.fillMaxWidth().clickable { selected = row }, color = NexusColors.Surface, shape = MaterialTheme.shapes.medium) {
-                Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                    Text(label, color = NexusColors.Cyan, style = MaterialTheme.typography.labelLarge)
-                    ContentText(row.rawText, maxLines = 4)
-                    Text(timestamp(row.createdAt), color = NexusColors.TextSecondary, style = MaterialTheme.typography.labelSmall)
+                items(MemoryFilter.entries) { item ->
+                    FilterChip(
+                        selected = filter == item,
+                        onClick = { viewModel.filter.value = item },
+                        label = { Text(item.label) },
+                    )
                 }
             }
         }
-        if (state.rows.size > visible) item { TextButton(onClick = { visible += 50 }) { Text("Show more") } }
+
+        item {
+            Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
+                Text(
+                    "${state.rows.size} results",
+                    style = MaterialTheme.typography.labelMedium,
+                    color = NexusColors.TextSecondary,
+                )
+                Text(
+                    "${state.total} saved",
+                    style = MaterialTheme.typography.labelMedium,
+                    color = NexusColors.Cyan,
+                )
+            }
+        }
+
+        state.error?.let { message -> item { Text(message, color = NexusColors.Rose) } }
+
+        if (state.rows.isEmpty()) {
+            item {
+                NexusCard {
+                    Text(
+                        if (state.total == 0) "Memory is empty" else "No matches",
+                        style = MaterialTheme.typography.titleMedium,
+                        fontWeight = FontWeight.Bold,
+                    )
+                    Text(
+                        if (state.total == 0)
+                            "Tap Add or share text, a link or an image to NEXUS to start building Memory."
+                        else
+                            "Try fewer words, a related concept or another filter.",
+                        color = NexusColors.TextSecondary,
+                    )
+                }
+            }
+        }
+
+        items(state.rows.take(visible), key = Observation::id) { row ->
+            val label = remember(row.source) { sourceLabel(context, row.source) }
+            val accent = when (row.type) {
+                ObservationType.NOTIFICATION -> NexusColors.Cyan
+                ObservationType.MANUAL, ObservationType.SHARED_TEXT -> NexusColors.Violet
+                ObservationType.SHARED_LINK -> NexusColors.Mint
+                ObservationType.IMAGE -> NexusColors.Amber
+                ObservationType.APP_USAGE -> NexusColors.TextMuted
+            }
+            NexusCard(
+                modifier = Modifier.clickable { selected = row },
+                accent = accent,
+            ) {
+                Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
+                    Column(verticalArrangement = Arrangement.spacedBy(3.dp)) {
+                        Text(label, color = accent, style = MaterialTheme.typography.labelLarge)
+                        NexusStatusPill(row.type.memoryLabel(), accent)
+                    }
+                    Text(
+                        timestamp(row.createdAt),
+                        color = NexusColors.TextMuted,
+                        style = MaterialTheme.typography.labelSmall,
+                    )
+                }
+                ContentText(row.rawText, maxLines = 5)
+            }
+        }
+
+        if (state.rows.size > visible) {
+            item {
+                OutlinedButton(
+                    onClick = { visible += 50 },
+                    modifier = Modifier.fillMaxWidth(),
+                ) { Text("Show more") }
+            }
+        }
     }
+
     selected?.let { ObservationDetails(it) { selected = null } }
+}
+
+private fun ObservationType.memoryLabel(): String = when (this) {
+    ObservationType.NOTIFICATION -> "NOTIFICATION"
+    ObservationType.MANUAL -> "NOTE"
+    ObservationType.SHARED_TEXT -> "SHARED TEXT"
+    ObservationType.SHARED_LINK -> "LINK"
+    ObservationType.IMAGE -> "IMAGE"
+    ObservationType.APP_USAGE -> "APP USAGE"
 }

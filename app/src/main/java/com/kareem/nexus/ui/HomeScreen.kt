@@ -1,5 +1,9 @@
 package com.kareem.nexus.ui
 
+import android.content.Context
+import android.content.Intent
+import android.provider.CalendarContract
+import android.widget.Toast
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
@@ -15,16 +19,12 @@ import androidx.compose.ui.unit.dp
 import androidx.hilt.lifecycle.viewmodel.compose.hiltViewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.kareem.nexus.core.model.*
-import com.kareem.nexus.domain.intelligence.ContextIntelligence
 import com.kareem.nexus.ui.design.*
 
 @Composable
 fun HomeScreen(contentPadding: PaddingValues, viewModel: HomeViewModel = hiltViewModel()) {
     val state by viewModel.uiState.collectAsStateWithLifecycle()
     var selected by remember { mutableStateOf<Observation?>(null) }
-    val active = state.actions.filter {
-        it.state in setOf(ActionState.READY_FOR_APPROVAL, ActionState.APPROVED, ActionState.EXECUTING)
-    }
 
     LazyColumn(
         modifier = Modifier.fillMaxSize().padding(contentPadding),
@@ -44,9 +44,7 @@ fun HomeScreen(contentPadding: PaddingValues, viewModel: HomeViewModel = hiltVie
             )
         }
 
-        state.error?.let { message ->
-            item { Text(message, color = NexusColors.Rose) }
-        }
+        state.error?.let { message -> item { Text(message, color = NexusColors.Rose) } }
 
         item {
             Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
@@ -64,9 +62,9 @@ fun HomeScreen(contentPadding: PaddingValues, viewModel: HomeViewModel = hiltVie
                     modifier = Modifier.weight(1f),
                 )
                 NexusMetricTile(
-                    value = state.readyActionCount.toString(),
-                    label = "Ready",
-                    hint = if (state.readyActionCount > 0) "Actions for you" else "All clear",
+                    value = state.topOfMind.size.toString(),
+                    label = "Top of mind",
+                    hint = if (state.topOfMind.isEmpty()) "All clear" else "Worth your attention",
                     accent = NexusColors.Violet,
                     modifier = Modifier.weight(1f),
                 )
@@ -74,21 +72,28 @@ fun HomeScreen(contentPadding: PaddingValues, viewModel: HomeViewModel = hiltVie
         }
 
         item {
-            NexusCard(accent = NexusColors.Cyan) {
+            val headline = when (state.topOfMind.size) {
+                0 -> "Nothing important is demanding attention"
+                1 -> "1 thing is worth your attention"
+                else -> "${state.topOfMind.size} things are worth your attention"
+            }
+            NexusCard(accent = if (state.topOfMind.isEmpty()) NexusColors.Mint else NexusColors.Cyan) {
                 Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
-                    NexusStatusPill("DAILY BRIEF", NexusColors.Cyan)
+                    NexusStatusPill("DAILY BRIEF", if (state.topOfMind.isEmpty()) NexusColors.Mint else NexusColors.Cyan)
                     Text(
                         "${state.brief.newSignals} new signals",
                         color = NexusColors.TextMuted,
                         style = MaterialTheme.typography.labelSmall,
                     )
                 }
+                Text(headline, style = MaterialTheme.typography.headlineSmall, fontWeight = FontWeight.Bold)
                 Text(
-                    state.brief.headline,
-                    style = MaterialTheme.typography.headlineSmall,
-                    fontWeight = FontWeight.Bold,
+                    if (state.topOfMind.isEmpty())
+                        "NEXUS filtered the noise and found nothing that needs a decision right now."
+                    else
+                        "Only unresolved requests, payments, commitments, failures and follow-ups that survived noise filtering are shown here.",
+                    color = NexusColors.TextSecondary,
                 )
-                Text(state.brief.summary, color = NexusColors.TextSecondary)
             }
         }
 
@@ -104,71 +109,33 @@ fun HomeScreen(contentPadding: PaddingValues, viewModel: HomeViewModel = hiltVie
             }
         }
 
-        if (active.isNotEmpty()) {
+        if (state.topOfMind.isNotEmpty()) {
             item {
                 NexusSectionHeader(
-                    title = "Action for you",
-                    subtitle = "Only signals that survived NEXUS noise filtering.",
+                    title = "Top of mind",
+                    subtitle = "What changed, what needs you, and the next useful step.",
                 )
             }
-            items(active.take(6), key = { "action_${it.id}" }) { action ->
-                val observation = state.observations.firstOrNull { action.id.endsWith(it.id) }
-                ActionCard(
-                    action = action,
+            items(state.topOfMind, key = { it.id }) { item ->
+                val observation = state.observations.firstOrNull { it.id == item.observationId }
+                TopOfMindCard(
+                    item = item,
+                    observation = observation,
                     viewModel = viewModel,
                     pending = state.pending,
-                    observation = observation,
                     onEvidence = { selected = it },
                 )
             }
         }
 
-        val actionObservationIds = active
-            .map { it.id.removePrefix("action_signal_").removePrefix("action_commitment_") }
-            .toSet()
-        val attention = state.attention.filterNot { it.id in actionObservationIds }
-        if (attention.isNotEmpty()) {
+        if (state.contextSituations.isNotEmpty()) {
             item {
                 NexusSectionHeader(
-                    title = "Needs attention",
-                    subtitle = "Potential requests, commitments and failures.",
+                    title = "Connected situations",
+                    subtitle = "Related signals collapsed into real-world threads.",
                 )
             }
-            items(attention.take(4), key = { "attention_${it.id}" }) { item ->
-                val accent = when (item.level) {
-                    AttentionLevel.URGENT -> NexusColors.Rose
-                    AttentionLevel.HIGH -> NexusColors.Amber
-                    else -> NexusColors.Cyan
-                }
-                NexusCard(
-                    modifier = Modifier.clickable {
-                        selected = state.observations.firstOrNull { it.id == item.id }
-                    },
-                    accent = accent,
-                ) {
-                    Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
-                        NexusStatusPill(item.level.name, accent)
-                        Text(
-                            item.kind.name.replace('_', ' '),
-                            color = NexusColors.TextMuted,
-                            style = MaterialTheme.typography.labelSmall,
-                        )
-                    }
-                    Text(item.title, style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold)
-                    ContentText(item.summary, maxLines = 3)
-                    Text("Review original evidence", color = NexusColors.Cyan, style = MaterialTheme.typography.labelMedium)
-                }
-            }
-        }
-
-        if (state.situations.isNotEmpty()) {
-            item {
-                NexusSectionHeader(
-                    title = "Connected context",
-                    subtitle = "Separate signals NEXUS thinks belong together.",
-                )
-            }
-            items(state.situations.take(3), key = { it.id }) { situation ->
+            items(state.contextSituations.take(4), key = { it.id }) { situation ->
                 NexusCard(accent = NexusColors.Violet) {
                     Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
                         NexusStatusPill(situation.kind.name.replace('_', ' '), NexusColors.Violet)
@@ -180,19 +147,26 @@ fun HomeScreen(contentPadding: PaddingValues, viewModel: HomeViewModel = hiltVie
                     }
                     Text(situation.title, style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold)
                     Text(situation.summary, color = NexusColors.TextSecondary)
+                    if (situation.facts.isNotEmpty()) {
+                        LazyRow(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                            items(situation.facts.take(4), key = { "${it.kind}:${it.normalizedValue}" }) { fact ->
+                                NexusStatusPill(fact.value, NexusColors.Mint)
+                            }
+                        }
+                    }
                 }
             }
         }
 
-        if (active.isEmpty() && attention.isEmpty()) {
+        if (state.topOfMind.isEmpty() && state.contextSituations.isEmpty()) {
             item {
                 NexusCard {
-                    Text("Nothing needs a decision right now", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold)
+                    Text("NEXUS is quiet on purpose", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold)
                     Text(
                         if (state.observationCount == 0)
-                            "Add a note or share something to NEXUS. Connect notifications in Settings when you're ready."
+                            "Add a note, image or link, or connect notifications in Settings."
                         else
-                            "NEXUS is still observing. It will stay quiet rather than manufacture generic suggestions.",
+                            "Your recent context is being remembered, but nothing currently looks important enough to interrupt you.",
                         color = NexusColors.TextSecondary,
                     )
                 }
@@ -204,78 +178,134 @@ fun HomeScreen(contentPadding: PaddingValues, viewModel: HomeViewModel = hiltVie
 }
 
 @Composable
-fun SectionTitle(title: String, subtitle: String) {
-    NexusSectionHeader(title = title, subtitle = subtitle)
-}
-
-@Composable
-fun ActionCard(
-    action: PreparedAction,
+private fun TopOfMindCard(
+    item: TopOfMindItem,
+    observation: Observation?,
     viewModel: HomeViewModel,
     pending: Set<String>,
-    observation: Observation?,
     onEvidence: (Observation) -> Unit,
 ) {
     val context = LocalContext.current
-    val enabled = action.id !in pending
-    val level = observation?.let { ContextIntelligence.buildAttention(listOf(it)).firstOrNull()?.level }
-    val accent = when (level) {
-        AttentionLevel.URGENT -> NexusColors.Rose
-        AttentionLevel.HIGH -> NexusColors.Amber
-        else -> NexusColors.Cyan
+    val actionId = "action_signal_${item.observationId}"
+    val enabled = actionId !in pending
+    val accent = when {
+        item.priority >= .88 -> NexusColors.Rose
+        item.priority >= .75 -> NexusColors.Amber
+        item.kind == SignalKind.REQUEST -> NexusColors.Cyan
+        else -> NexusColors.Violet
     }
-    val stateLabel = when (action.state) {
-        ActionState.READY_FOR_APPROVAL -> "READY FOR REVIEW"
-        ActionState.APPROVED -> "APPROVED"
-        ActionState.EXECUTING -> "IN PROGRESS"
-        ActionState.DRAFT -> "LATER · 24 HOURS"
-        ActionState.COMPLETED -> "COMPLETED"
-        ActionState.REJECTED -> "DISMISSED"
-        ActionState.FAILED -> "FAILED"
+    val label = when {
+        item.priority >= .88 -> "HIGH PRIORITY"
+        item.kind == SignalKind.REQUEST -> "NEEDS REPLY"
+        item.kind == SignalKind.PAYMENT -> "PAYMENT"
+        item.kind == SignalKind.APPOINTMENT -> "UPCOMING"
+        item.kind == SignalKind.FAILURE -> "NEEDS REVIEW"
+        item.kind == SignalKind.DELIVERY -> "ORDER"
+        else -> "FOLLOW UP"
     }
 
     NexusCard(accent = accent) {
         Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
-            NexusStatusPill(stateLabel, if (action.state == ActionState.COMPLETED) NexusColors.Mint else accent)
-            Text(timestamp(action.createdAt), style = MaterialTheme.typography.labelSmall, color = NexusColors.TextMuted)
+            NexusStatusPill(label, accent)
+            Text(timestamp(item.createdAt), style = MaterialTheme.typography.labelSmall, color = NexusColors.TextMuted)
         }
-        Text(action.title, style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold)
-        ContentText(action.description, maxLines = 5)
+        Text(item.title, style = MaterialTheme.typography.titleLarge, fontWeight = FontWeight.Bold)
+        ContentText(item.summary, maxLines = 5)
 
         if (observation != null) {
-            TextButton(onClick = { onEvidence(observation) }) { Text("Review original evidence") }
-        } else {
-            TextButton(onClick = { copyText(context, action.description) }) { Text("Copy details") }
+            TextButton(onClick = { onEvidence(observation) }) { Text("View evidence") }
         }
 
-        when (action.state) {
-            ActionState.READY_FOR_APPROVAL -> {
-                Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                    Button(
-                        onClick = { viewModel.approveAction(action.id) },
-                        enabled = enabled,
-                        modifier = Modifier.weight(1f),
-                    ) { Text("Approve") }
-                    OutlinedButton(
-                        onClick = { viewModel.deferAction(action.id) },
-                        enabled = enabled,
-                        modifier = Modifier.weight(1f),
-                        border = BorderStroke(1.dp, NexusColors.Border),
-                    ) { Text("Later") }
-                }
-                TextButton(onClick = { viewModel.rejectAction(action.id) }, enabled = enabled) { Text("Dismiss") }
-            }
-            ActionState.APPROVED -> {
-                Button(onClick = { viewModel.startAction(action.id) }, enabled = enabled) { Text("Start tracking") }
-                TextButton(onClick = { viewModel.rejectAction(action.id) }, enabled = enabled) { Text("Dismiss") }
-            }
-            ActionState.EXECUTING -> {
-                Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                    Button(onClick = { viewModel.completeAction(action.id) }, enabled = enabled) { Text("Mark done") }
-                    OutlinedButton(onClick = { viewModel.failAction(action.id) }, enabled = enabled) { Text("Failed") }
+        val primary = item.actions.firstOrNull { it.kind !in setOf(NexusActionKind.REMIND, NexusActionKind.MARK_RESOLVED) }
+        Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+            if (primary != null) {
+                Button(
+                    onClick = {
+                        executeContextAction(
+                            context = context,
+                            action = primary,
+                            item = item,
+                            observation = observation,
+                        )
+                    },
+                    enabled = enabled,
+                    modifier = Modifier.weight(1f),
+                ) {
+                    Text(primaryLabel(primary, observation))
                 }
             }
-            else -> Unit
+            if (item.actions.any { it.kind == NexusActionKind.REMIND }) {
+                OutlinedButton(
+                    onClick = { viewModel.deferAction(actionId) },
+                    enabled = enabled,
+                    modifier = Modifier.weight(1f),
+                    border = BorderStroke(1.dp, NexusColors.Border),
+                ) { Text("Remind tomorrow") }
+            }
+        }
+
+        if (item.actions.any { it.kind == NexusActionKind.MARK_RESOLVED }) {
+            TextButton(onClick = { viewModel.rejectAction(actionId) }, enabled = enabled) {
+                Text("Done")
+            }
         }
     }
+}
+
+private fun primaryLabel(action: ContextAction, observation: Observation?): String = when (action.kind) {
+    NexusActionKind.OPEN_SOURCE, NexusActionKind.REPLY -> {
+        val source = observation?.source?.substringAfterLast('.')?.replace('_', ' ')?.replaceFirstChar { it.uppercase() }
+        if (source.isNullOrBlank() || source.equals("android", true)) action.label else "Open $source"
+    }
+    NexusActionKind.ADD_TO_CALENDAR -> "Add to calendar"
+    NexusActionKind.TRACK -> "Track"
+    NexusActionKind.RETRY -> "Open source"
+    NexusActionKind.NAVIGATE -> "Navigate"
+    NexusActionKind.CALL -> "Call"
+    NexusActionKind.COPY -> "Copy"
+    else -> action.label
+}
+
+private fun executeContextAction(
+    context: Context,
+    action: ContextAction,
+    item: TopOfMindItem,
+    observation: Observation?,
+) {
+    when (action.kind) {
+        NexusActionKind.OPEN_SOURCE,
+        NexusActionKind.REPLY,
+        NexusActionKind.TRACK,
+        NexusActionKind.RETRY -> {
+            val packageName = observation?.source ?: action.payload
+            val launchIntent = packageName?.let(context.packageManager::getLaunchIntentForPackage)
+            if (launchIntent != null) {
+                context.startActivity(launchIntent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK))
+            } else {
+                Toast.makeText(context, "Source app is not directly launchable", Toast.LENGTH_SHORT).show()
+            }
+        }
+        NexusActionKind.ADD_TO_CALENDAR -> {
+            runCatching {
+                val intent = Intent(Intent.ACTION_INSERT)
+                    .setData(CalendarContract.Events.CONTENT_URI)
+                    .putExtra(CalendarContract.Events.TITLE, item.title)
+                    .putExtra(CalendarContract.Events.DESCRIPTION, item.summary)
+                    .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+                context.startActivity(intent)
+            }.onFailure {
+                Toast.makeText(context, "No calendar app available", Toast.LENGTH_SHORT).show()
+            }
+        }
+        NexusActionKind.COPY -> copyText(context, item.summary)
+        NexusActionKind.REMIND,
+        NexusActionKind.MARK_RESOLVED,
+        NexusActionKind.NAVIGATE,
+        NexusActionKind.CALL -> Unit
+    }
+}
+
+@Composable
+fun SectionTitle(title: String, subtitle: String) {
+    NexusSectionHeader(title = title, subtitle = subtitle)
 }

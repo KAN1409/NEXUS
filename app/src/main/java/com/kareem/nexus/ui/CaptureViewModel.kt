@@ -24,6 +24,7 @@ data class CaptureUiState(
     val usageAccess: Boolean = false,
     val notificationAccess: Boolean = false,
     val saveRevision: Int = 0,
+    val processedRevision: Int = 0,
 )
 
 @HiltViewModel
@@ -41,8 +42,6 @@ class CaptureViewModel @Inject constructor(
     fun clearMessage() = _state.update { it.copy(message = null) }
 
     private fun runOperation(block: suspend () -> String?) {
-        // Mark the queue busy synchronously. This prevents a second UI action from observing a
-        // false idle gap while a previous operation is still being dispatched or another one is queued.
         pendingOperations.incrementAndGet()
         _state.update { it.copy(busy = true) }
 
@@ -68,10 +67,17 @@ class CaptureViewModel @Inject constructor(
         }
     }
 
+    private fun markProcessedSave() {
+        _state.update {
+            it.copy(
+                saveRevision = it.saveRevision + 1,
+                processedRevision = it.processedRevision + 1,
+            )
+        }
+    }
+
     fun captureText(text: String) {
         if (text.isBlank()) return
-        // Never drop a user capture because a previous enrichment pass is still finishing.
-        // runOperation is serialized by gate, so rapid saves queue safely instead of being ignored.
         runOperation {
             repository.captureObservation(
                 if (text.trim().startsWith("https://") || text.trim().startsWith("http://")) {
@@ -82,8 +88,10 @@ class CaptureViewModel @Inject constructor(
                 text,
                 "NEXUS",
             )
-            _state.update { it.copy(saveRevision = it.saveRevision + 1) }
             repository.rebuildUnderstanding()
+            // A revision means the complete local intelligence pipeline finished, not merely that
+            // the raw row was inserted. This gives UI/automation a deterministic committed state.
+            markProcessedSave()
             "Saved to Memory"
         }
     }
@@ -92,7 +100,10 @@ class CaptureViewModel @Inject constructor(
         if (intent.action !in setOf(Intent.ACTION_SEND, Intent.ACTION_SEND_MULTIPLE)) return
         runOperation {
             val count = shareIngestor.ingest(intent)
-            if (count > 0) repository.rebuildUnderstanding()
+            if (count > 0) {
+                repository.rebuildUnderstanding()
+                markProcessedSave()
+            }
             if (count > 0) "Saved $count item(s) to Memory" else "This share contains no supported text or images"
         }
     }
@@ -104,11 +115,6 @@ class CaptureViewModel @Inject constructor(
         )
     }
 
-    /**
-     * Called by ON_RESUME. Permissions are cheap to refresh every time, but app-usage capture and
-     * whole-context rebuilding are throttled to avoid turning navigation/resume into background work.
-     * Notification/share ingestion already schedules understanding when new evidence arrives.
-     */
     fun refreshContext() {
         refreshAccessState()
         val now = android.os.SystemClock.elapsedRealtime()

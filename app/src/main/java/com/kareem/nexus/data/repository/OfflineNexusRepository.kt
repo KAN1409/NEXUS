@@ -4,13 +4,14 @@ import com.kareem.nexus.core.model.*
 import com.kareem.nexus.data.local.*
 import com.kareem.nexus.domain.action.ActionLifecyclePolicy
 import com.kareem.nexus.domain.intelligence.ContextIntelligence
+import com.kareem.nexus.domain.intelligence.PersonalIntelligenceEngine
 import com.kareem.nexus.domain.repository.NexusRepository
 import java.security.MessageDigest
 import java.util.UUID
-import java.util.Locale
 import androidx.room.withTransaction
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
+import org.json.JSONArray
 import org.json.JSONObject
 import javax.inject.Inject
 import javax.inject.Singleton
@@ -138,7 +139,6 @@ class OfflineNexusRepository @Inject constructor(
             .digest(identity.toByteArray())
             .joinToString("") { "%02x".format(it) }
 
-        // Repeated callbacks must not rewrite first-seen time or resurface old decisions.
         val existing = dao.observationById(digest)
         if (existing != null && type != ObservationType.APP_USAGE) return@withTransaction
         dao.upsertObservation(
@@ -184,6 +184,20 @@ class OfflineNexusRepository @Inject constructor(
         }
 
         val rows = dao.recentObservationsOnce()
+        val domainRows = rows.mapNotNull { row ->
+            runCatching {
+                Observation(
+                    id = row.id,
+                    type = ObservationType.valueOf(row.type),
+                    rawText = row.rawText,
+                    source = row.source,
+                    createdAt = row.createdAt,
+                )
+            }.getOrNull()
+        }
+
+        materializePersonalIntelligence(domainRows, now)
+
         val scores = linkedMapOf<String, Double>()
 
         fun add(label: String, weight: Double) {
@@ -278,9 +292,7 @@ class OfflineNexusRepository @Inject constructor(
                         else -> row.type != ObservationType.APP_USAGE.name
                     }
                 }
-                .map { row ->
-                    if (row.type == ObservationType.APP_USAGE.name) "usage:${row.source}" else row.id
-                }
+                .map { row -> if (row.type == ObservationType.APP_USAGE.name) "usage:${row.source}" else row.id }
                 .distinct()
                 .size
 
@@ -303,29 +315,33 @@ class OfflineNexusRepository @Inject constructor(
             )
         }
 
-        val actionableNotifications = rows
-            .filter { it.type in setOf(ObservationType.NOTIFICATION.name, ObservationType.MANUAL.name, ObservationType.SHARED_TEXT.name) }
+        val actionable = domainRows
+            .filter { it.type in setOf(ObservationType.NOTIFICATION, ObservationType.MANUAL, ObservationType.SHARED_TEXT) }
             .filter { it.createdAt >= now - 7L * 24 * 60 * 60 * 1000 }
-            .mapNotNull { row ->
-                ContextIntelligence.suggestedActionFor(row.rawText)?.let { suggestion ->
-                    Triple(row, suggestion.first, suggestion.second)
-                }
+            .map { it to PersonalIntelligenceEngine.interpret(it, now) }
+            .filter { (_, understanding) ->
+                !understanding.isNoise &&
+                    understanding.kind != SignalKind.INFORMATION &&
+                    understanding.actions.isNotEmpty() &&
+                    understanding.priority >= 0.45
             }
 
-        actionableNotifications.forEach { item ->
-            val row = item.first
-            val title = item.second
-            val description = item.third
-            val id = "action_signal_" + row.id
-            if (dao.actionById(id) == null && dao.actionById("action_commitment_" + row.id) == null) {
+        actionable.forEach { (observation, understanding) ->
+            val id = "action_signal_${observation.id}"
+            if (dao.actionById(id) == null && dao.actionById("action_commitment_${observation.id}") == null) {
                 dao.upsertAction(
                     ActionEntity(
                         id = id,
-                        title = title,
-                        description = description,
+                        title = understanding.title,
+                        description = understanding.summary,
                         state = ActionState.READY_FOR_APPROVAL.name,
-                        payloadJson = JSONObject().put("source", row.source).put("observationId", row.id).toString(),
-                        createdAt = row.createdAt,
+                        payloadJson = JSONObject()
+                            .put("source", observation.source)
+                            .put("observationId", observation.id)
+                            .put("kind", understanding.kind.name)
+                            .put("primaryAction", understanding.actions.firstOrNull()?.kind?.name)
+                            .toString(),
+                        createdAt = observation.createdAt,
                         updatedAt = now,
                     )
                 )
@@ -333,6 +349,79 @@ class OfflineNexusRepository @Inject constructor(
             }
         }
     }
+
+    private suspend fun materializePersonalIntelligence(observations: List<Observation>, now: Long) {
+        dao.clearObservationUnderstandings()
+        dao.clearSituationMembers()
+        dao.clearSituations()
+
+        observations
+            .filter { it.type != ObservationType.APP_USAGE }
+            .forEach { observation ->
+                val understanding = PersonalIntelligenceEngine.interpret(observation, now)
+                dao.upsertObservationUnderstanding(
+                    ObservationUnderstandingEntity(
+                        observationId = observation.id,
+                        kind = understanding.kind.name,
+                        title = understanding.title,
+                        summary = understanding.summary,
+                        factsJson = factsJson(understanding.facts),
+                        actionsJson = actionsJson(understanding.actions),
+                        priority = understanding.priority,
+                        confidence = understanding.confidence,
+                        isNoise = understanding.isNoise,
+                        analyzedAt = understanding.analyzedAt,
+                    )
+                )
+            }
+
+        PersonalIntelligenceEngine.buildSituations(observations, now = now).forEach { situation ->
+            dao.upsertSituation(
+                SituationEntity(
+                    id = situation.id,
+                    title = situation.title,
+                    summary = situation.summary,
+                    kind = situation.kind.name,
+                    state = situation.state.name,
+                    factsJson = factsJson(situation.facts),
+                    actionsJson = actionsJson(situation.actions),
+                    priority = situation.priority,
+                    confidence = situation.confidence,
+                    createdAt = situation.createdAt,
+                    lastUpdatedAt = situation.lastUpdatedAt,
+                )
+            )
+            dao.upsertSituationMembers(
+                situation.observationIds.map { observationId ->
+                    SituationMemberEntity(situation.id, observationId)
+                }
+            )
+        }
+    }
+
+    private fun factsJson(facts: List<ExtractedFact>): String = JSONArray().apply {
+        facts.forEach { fact ->
+            put(
+                JSONObject()
+                    .put("kind", fact.kind.name)
+                    .put("value", fact.value)
+                    .put("normalizedValue", fact.normalizedValue)
+                    .put("confidence", fact.confidence)
+            )
+        }
+    }.toString()
+
+    private fun actionsJson(actions: List<ContextAction>): String = JSONArray().apply {
+        actions.forEach { action ->
+            put(
+                JSONObject()
+                    .put("kind", action.kind.name)
+                    .put("label", action.label)
+                    .put("payload", action.payload)
+                    .put("requiresApproval", action.requiresApproval)
+            )
+        }
+    }.toString()
 
     override suspend fun seedFirstRun() = Unit
 }

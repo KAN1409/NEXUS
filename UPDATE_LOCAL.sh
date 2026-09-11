@@ -64,13 +64,19 @@ new_cert="$(cert_digest "$work_dir/update.apk")"
 unset NEXUS_STORE_PASSWORD NEXUS_KEY_PASSWORD
 output_dir="$HOME/NEXUS_UPDATES"
 mkdir -p "$output_dir"
-output_apk="$output_dir/NEXUS-1.1.0-signed.apk"
+output_apk="$output_dir/NEXUS-2.0.0-signed.apk"
 cp "$work_dir/update.apk" "$output_apk"
 
 adb -s "$device" install -r "$output_apk"
 adb -s "$device" shell am start -n com.kareem.nexus/.MainActivity >/dev/null
 
+installed_version="$(adb -s "$device" shell dumpsys package "$package" | tr -d '\r' | awk -F= '/versionName=/{print $2; exit}')"
+installed_code="$(adb -s "$device" shell dumpsys package "$package" | tr -d '\r' | sed -n 's/.*versionCode=\([0-9][0-9]*\).*/\1/p' | head -1)"
+[[ "$installed_version" == "2.0.0" ]] || { echo "Unexpected installed versionName: ${installed_version:-unknown}"; exit 10; }
+[[ "$installed_code" == "200" ]] || { echo "Unexpected installed versionCode: ${installed_code:-unknown}"; exit 10; }
+
 echo "UPDATE_OK"
 echo "APK: $output_apk"
+echo "Version: $installed_version ($installed_code)"
 echo "Signer SHA-256: $new_cert"
 echo 'Existing NEXUS data was preserved.'

@@ -59,3 +59,19 @@ Any Room schema change requires:
 3. Exporting the new schema.
 4. Adding/updating migration tests.
 5. Verifying upgrade from every still-supported schema version.
+
+
+## One-time signer recovery
+If the installed signing key password is no longer usable, do not keep retrying installs with mismatched APKs.
+
+Use `RECOVER_SIGNING.sh` as an emergency recovery path only. It:
+- force-stops NEXUS;
+- creates and validates a local app-data backup before uninstall;
+- creates a new permanent local v2 signing identity with a random password stored in a chmod-600 local file;
+- signs the candidate APK;
+- uninstalls only after the backup and new APK are validated;
+- reinstalls NEXUS with the new permanent signer;
+- restores the backed-up app data;
+- retains both the backup and signed APK for recovery.
+
+This is not a normal release path. Normal releases must continue to use `install -r` with the same signer.

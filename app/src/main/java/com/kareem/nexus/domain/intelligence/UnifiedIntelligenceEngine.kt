@@ -6,20 +6,11 @@ import java.time.LocalTime
 import java.time.ZoneId
 import java.time.temporal.ChronoUnit
 
-/**
- * Value-first interpretation built on top of the low-cost local classifier.
- *
- * The old engine answers "what kind of signal is this?". This layer answers the product question:
- * "is there an unresolved loop, who/what is it about, when does it matter, and what can the user do?"
- */
+/** Value-first product interpretation on top of the cheap deterministic classifier. */
 object UnifiedIntelligenceEngine {
     private val waitingTerms = listOf(
         "waiting for", "awaiting", "pending from", "still waiting", "waiting on",
         "منتظر", "مستني", "في انتظار", "لسه مستني", "بانتظار", "معلق عند",
-    )
-    private val replyTerms = listOf(
-        "reply", "respond", "confirm", "send", "please", "kindly",
-        "رد", "ابعت", "ابعث", "ارسل", "أرسل", "أكد", "اكد", "يرجى", "برجاء",
     )
 
     fun deriveOpenLoop(
@@ -64,12 +55,27 @@ object UnifiedIntelligenceEngine {
             OpenLoopKind.FOLLOW_UP -> party?.let { "Follow up with $it" } ?: "Follow-up needed"
         }
 
+        val hasLaunchableSource = observation.source
+            ?.takeIf { it != "NEXUS" && it.contains('.') }
+            ?.isNotBlank() == true
+        val sourceActions = understanding.actions
+            .filterNot { action ->
+                action.kind in setOf(NexusActionKind.OPEN_SOURCE, NexusActionKind.REPLY, NexusActionKind.RETRY) && !hasLaunchableSource
+            }
+            .sortedBy { action ->
+                when {
+                    kind == OpenLoopKind.NEEDS_REPLY && action.kind == NexusActionKind.REPLY -> 0
+                    action.kind == NexusActionKind.OPEN_SOURCE -> 1
+                    else -> 2
+                }
+            }
+
         val enrichedActions = buildList {
-            addAll(understanding.actions)
-            if (understanding.actions.none { it.kind == NexusActionKind.REMIND } && kind !in setOf(OpenLoopKind.DELIVERY)) {
+            addAll(sourceActions)
+            if (sourceActions.none { it.kind == NexusActionKind.REMIND } && kind != OpenLoopKind.DELIVERY) {
                 add(ContextAction(NexusActionKind.REMIND, "Remind later"))
             }
-            if (understanding.actions.none { it.kind == NexusActionKind.MARK_RESOLVED }) {
+            if (sourceActions.none { it.kind == NexusActionKind.MARK_RESOLVED }) {
                 add(ContextAction(NexusActionKind.MARK_RESOLVED, "Done"))
             }
         }.distinctBy { it.kind }.take(4)
@@ -99,20 +105,20 @@ object UnifiedIntelligenceEngine {
         observations: List<Observation>,
         now: Long = System.currentTimeMillis(),
     ): SituationBrief {
-        val relatedLoops = loops.filter { it.situationId == situation.id && it.state !in setOf(OpenLoopState.RESOLVED, OpenLoopState.DISMISSED) }
+        val relatedLoops = loops.filter {
+            it.situationId == situation.id && it.state !in setOf(OpenLoopState.RESOLVED, OpenLoopState.DISMISSED)
+        }
         val evidence = observations.filter { it.id in situation.observationIds }.sortedByDescending { it.createdAt }
         val latest = evidence.firstOrNull()
         val topLoop = relatedLoops.maxByOrNull { it.priority }
-        val changedRecently = latest?.createdAt?.let { now - it <= 24L * 60L * 60L * 1000L } == true
+        val changedRecently = latest?.let { now - it.createdAt <= 24L * 60L * 60L * 1000L } == true
 
-        val currentState = topLoop?.title
-            ?: latest?.rawText?.take(180)
-            ?: situation.summary
+        val currentState = topLoop?.title ?: latest?.rawText?.take(180) ?: situation.summary
         val whatChanged = when {
-            evidence.isEmpty() -> "No source evidence is available."
-            changedRecently && evidence.size > 1 -> "${evidence.size} connected signals; the latest arrived ${relativeAge(latest!!.createdAt, now)}."
-            changedRecently -> "New evidence arrived ${relativeAge(latest!!.createdAt, now)}."
-            else -> "Last changed ${relativeAge(latest!!.createdAt, now)}."
+            latest == null -> "No source evidence is available."
+            changedRecently && evidence.size > 1 -> "${evidence.size} connected signals; the latest arrived ${relativeAge(latest.createdAt, now)}."
+            changedRecently -> "New evidence arrived ${relativeAge(latest.createdAt, now)}."
+            else -> "Last changed ${relativeAge(latest.createdAt, now)}."
         }
         val nextStep = topLoop?.let { loop ->
             loop.actions.firstOrNull { it.kind !in setOf(NexusActionKind.MARK_RESOLVED, NexusActionKind.REMIND) }?.label

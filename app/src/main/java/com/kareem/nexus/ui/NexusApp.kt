@@ -3,6 +3,8 @@ package com.kareem.nexus.ui
 import android.content.Intent
 import android.provider.Settings
 import androidx.activity.compose.BackHandler
+import androidx.activity.compose.rememberLauncherForActivityResult
+import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
@@ -37,6 +39,15 @@ fun NexusApp(viewModel: CaptureViewModel = hiltViewModel()) {
     val context = androidx.compose.ui.platform.LocalContext.current
     val snackbars = remember { SnackbarHostState() }
     var savedRevision by remember { mutableIntStateOf(state.saveRevision) }
+    val imagePicker = rememberLauncherForActivityResult(ActivityResultContracts.GetContent()) { uri ->
+        if (uri != null) {
+            val shareIntent = Intent(Intent.ACTION_SEND)
+                .setType("image/*")
+                .putExtra(Intent.EXTRA_STREAM, uri)
+                .addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
+            viewModel.ingestShare(shareIntent)
+        }
+    }
 
     LifecycleEventEffect(Lifecycle.Event.ON_RESUME) { viewModel.refreshContext() }
 
@@ -124,6 +135,7 @@ fun NexusApp(viewModel: CaptureViewModel = hiltViewModel()) {
                 onDraftChange = { draft = it },
                 busy = state.busy,
                 onSave = { viewModel.captureText(draft) },
+                onAddImage = { imagePicker.launch("image/*") },
                 onBack = { showCapture = false },
             )
         } else {
@@ -152,6 +164,7 @@ private fun AddToMemoryScreen(
     onDraftChange: (String) -> Unit,
     busy: Boolean,
     onSave: () -> Unit,
+    onAddImage: () -> Unit,
     onBack: () -> Unit,
 ) {
     Column(
@@ -169,7 +182,7 @@ private fun AddToMemoryScreen(
         NexusCard(accent = NexusColors.Violet) {
             Text("Good things to save", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold)
             Text(
-                "A request, link, appointment, decision, idea or detail you may want to find again.",
+                "A request, link, appointment, decision, idea, screenshot or detail you may want to find again.",
                 color = NexusColors.TextSecondary,
             )
         }
@@ -180,15 +193,26 @@ private fun AddToMemoryScreen(
             minLines = 6,
             label = { Text("Text or link") },
         )
-        Button(
-            onClick = onSave,
-            enabled = draft.isNotBlank() && !busy,
-            modifier = Modifier.fillMaxWidth(),
-        ) {
-            Text(if (busy) "Saving…" else "Save to Memory")
+        Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
+            Button(
+                onClick = onSave,
+                enabled = draft.isNotBlank() && !busy,
+                modifier = Modifier.weight(1f),
+            ) {
+                Text(if (busy) "Saving…" else "Save text")
+            }
+            OutlinedButton(
+                onClick = onAddImage,
+                enabled = !busy,
+                modifier = Modifier.weight(1f),
+            ) {
+                NexusIcon(NexusIconType.Image, Modifier.size(18.dp), NexusColors.Cyan, NexusColors.Violet)
+                Spacer(Modifier.width(8.dp))
+                Text("Add image")
+            }
         }
         Text(
-            "Images shared to NEXUS are saved locally and scanned for searchable text when supported.",
+            "Images are copied into private NEXUS storage and scanned locally for searchable text when supported.",
             color = NexusColors.TextSecondary,
             style = MaterialTheme.typography.bodySmall,
         )

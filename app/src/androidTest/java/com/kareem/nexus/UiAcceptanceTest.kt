@@ -29,12 +29,11 @@ class UiAcceptanceTest {
         }
         compose.onNode(hasText("Save") and isEnabled(), useUnmergedTree = true).performClick()
 
-        // Navigation remains available while the IME is dismissing. Re-selecting For You makes the
-        // acceptance flow deterministic without weakening the actual save/intelligence assertions.
+        val forYouNav = hasText("For You") and hasClickAction()
         compose.waitUntil(15_000) {
-            compose.onAllNodesWithText("For You", useUnmergedTree = true).fetchSemanticsNodes().isNotEmpty()
+            compose.onAllNodes(forYouNav, useUnmergedTree = true).fetchSemanticsNodes().isNotEmpty()
         }
-        compose.onNodeWithText("For You", useUnmergedTree = true).performClick()
+        compose.onNode(forYouNav, useUnmergedTree = true).performClick()
         compose.waitUntil(15_000) {
             compose.onAllNodesWithText("Add", useUnmergedTree = true).fetchSemanticsNodes().isNotEmpty()
         }

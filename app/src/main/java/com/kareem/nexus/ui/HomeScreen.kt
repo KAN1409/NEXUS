@@ -10,10 +10,13 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.material3.Card
+import androidx.compose.material3.Button
 import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.Text
+import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.ui.Modifier
@@ -73,8 +76,9 @@ fun HomeScreen(
             Text("For You", style = MaterialTheme.typography.headlineSmall, fontWeight = FontWeight.Bold)
         }
 
-        if (state.actions.isNotEmpty()) {
-            items(state.actions.take(2), key = { "home_action_" + it.id }) { action ->
+        val actionable = state.actions.filter { it.state.name in setOf("READY_FOR_APPROVAL", "APPROVED", "EXECUTING") }
+        if (actionable.isNotEmpty()) {
+            items(actionable.take(2), key = { "home_action_" + it.id }) { action ->
                 Card(
                     modifier = Modifier.fillMaxWidth(),
                     colors = CardDefaults.cardColors(containerColor = NexusColors.SurfaceRaised),
@@ -84,9 +88,57 @@ fun HomeScreen(
                         Modifier.padding(NexusSpacing.Lg),
                         verticalArrangement = Arrangement.spacedBy(NexusSpacing.Sm),
                     ) {
-                        Text("READY FOR YOU", style = MaterialTheme.typography.labelMedium, color = NexusColors.Cyan)
+                        val label = when (action.state.name) {
+                            "READY_FOR_APPROVAL" -> "WAITING FOR YOU"
+                            "APPROVED" -> "APPROVED"
+                            "EXECUTING" -> "IN PROGRESS"
+                            else -> action.state.name.replace('_', ' ')
+                        }
+                        Text(label, style = MaterialTheme.typography.labelMedium, color = NexusColors.Cyan)
                         Text(action.title, style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold)
                         Text(action.description, style = MaterialTheme.typography.bodyMedium, color = NexusColors.TextSecondary)
+
+                        when (action.state.name) {
+                            "READY_FOR_APPROVAL" -> {
+                                Row(
+                                    modifier = Modifier.fillMaxWidth(),
+                                    horizontalArrangement = Arrangement.spacedBy(NexusSpacing.Sm),
+                                ) {
+                                    Button(
+                                        onClick = { viewModel.approveAction(action.id) },
+                                        modifier = Modifier.weight(1f),
+                                    ) { Text("Approve") }
+                                    OutlinedButton(
+                                        onClick = { viewModel.deferAction(action.id) },
+                                        modifier = Modifier.weight(1f),
+                                    ) { Text("Later") }
+                                }
+                                TextButton(onClick = { viewModel.rejectAction(action.id) }) {
+                                    Text("Dismiss")
+                                }
+                            }
+                            "APPROVED" -> {
+                                Button(
+                                    onClick = { viewModel.startAction(action.id) },
+                                    modifier = Modifier.fillMaxWidth(),
+                                ) { Text("Start") }
+                            }
+                            "EXECUTING" -> {
+                                Row(
+                                    modifier = Modifier.fillMaxWidth(),
+                                    horizontalArrangement = Arrangement.spacedBy(NexusSpacing.Sm),
+                                ) {
+                                    Button(
+                                        onClick = { viewModel.completeAction(action.id) },
+                                        modifier = Modifier.weight(1f),
+                                    ) { Text("Complete") }
+                                    OutlinedButton(
+                                        onClick = { viewModel.failAction(action.id) },
+                                        modifier = Modifier.weight(1f),
+                                    ) { Text("Failed") }
+                                }
+                            }
+                        }
                     }
                 }
             }

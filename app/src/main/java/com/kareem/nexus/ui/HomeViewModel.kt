@@ -12,6 +12,7 @@ import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.stateIn
+import kotlinx.coroutines.launch
 import javax.inject.Inject
 
 data class HomeUiState(
@@ -26,7 +27,7 @@ data class HomeUiState(
 
 @HiltViewModel
 class HomeViewModel @Inject constructor(
-    repository: NexusRepository,
+    private val repository: NexusRepository,
 ) : ViewModel() {
     val uiState: StateFlow<HomeUiState> = combine(
         repository.observationCount(),
@@ -45,4 +46,11 @@ class HomeViewModel @Inject constructor(
             readyActionCount = actions.count { it.state.name == "READY_FOR_APPROVAL" },
         )
     }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), HomeUiState())
+
+    fun approveAction(id: String) = viewModelScope.launch { repository.approveAction(id) }
+    fun deferAction(id: String) = viewModelScope.launch { repository.deferAction(id) }
+    fun rejectAction(id: String) = viewModelScope.launch { repository.rejectAction(id) }
+    fun startAction(id: String) = viewModelScope.launch { repository.startAction(id) }
+    fun completeAction(id: String) = viewModelScope.launch { repository.completeAction(id) }
+    fun failAction(id: String) = viewModelScope.launch { repository.failAction(id) }
 }

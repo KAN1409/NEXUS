@@ -106,7 +106,7 @@ fun ActivityScreen(
                             }
                             if (item.actions.any { it.kind == NexusActionKind.MARK_RESOLVED }) {
                                 Button(
-                                    onClick = { viewModel.rejectAction(actionId) },
+                                    onClick = { viewModel.resolveAction(actionId) },
                                     enabled = actionId !in state.pending,
                                     modifier = Modifier.weight(1f),
                                 ) { Text("Done") }
@@ -188,7 +188,7 @@ private fun TimelineEvent(
     createdAt: Long,
 ) {
     val accent = when (signal) {
-        FeedbackSignal.COMPLETED -> NexusColors.Mint
+        FeedbackSignal.COMPLETED, FeedbackSignal.RESOLVED -> NexusColors.Mint
         FeedbackSignal.FAILED, FeedbackSignal.REJECTED -> NexusColors.Rose
         FeedbackSignal.DEFERRED -> NexusColors.Amber
         FeedbackSignal.APPROVED, FeedbackSignal.STARTED, FeedbackSignal.ACTED -> NexusColors.Cyan
@@ -200,7 +200,8 @@ private fun TimelineEvent(
         FeedbackSignal.APPROVED -> "Action approved"
         FeedbackSignal.DEFERRED -> "Saved for later"
         FeedbackSignal.RESURFACED -> "Suggestion resurfaced"
-        FeedbackSignal.REJECTED -> "Resolved or dismissed"
+        FeedbackSignal.REJECTED -> "Dismissed"
+        FeedbackSignal.RESOLVED -> "Marked done"
         FeedbackSignal.STARTED -> "Action in progress"
         FeedbackSignal.COMPLETED -> "Action completed"
         FeedbackSignal.FAILED -> "Action failed"

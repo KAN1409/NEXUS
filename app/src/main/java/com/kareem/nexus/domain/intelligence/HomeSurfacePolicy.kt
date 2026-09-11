@@ -33,10 +33,7 @@ object HomeSurfacePolicy {
             .groupBy(::surfaceKey)
             .values
             .mapNotNull { group ->
-                group.maxWithOrNull(
-                    compareBy<OpenLoop> { it.priority }
-                        .thenBy { it.updatedAt }
-                )
+                group.maxWithOrNull(compareBy<OpenLoop> { it.priority }.thenBy { it.updatedAt })
             }
             .sortedWith(
                 compareByDescending<OpenLoop> { it.priority }
@@ -47,22 +44,14 @@ object HomeSurfacePolicy {
         val needsYou = surfaced.filter {
             it.kind !in setOf(OpenLoopKind.WAITING_ON, OpenLoopKind.DELIVERY, OpenLoopKind.UPCOMING)
         }.take(limitPerSection)
-
         val waitingOn = surfaced.filter {
             it.kind in setOf(OpenLoopKind.WAITING_ON, OpenLoopKind.DELIVERY)
         }.take(limitPerSection)
-
-        val upcoming = surfaced
-            .filter { it.kind == OpenLoopKind.UPCOMING }
+        val upcoming = surfaced.filter { it.kind == OpenLoopKind.UPCOMING }
             .sortedBy { it.dueAt ?: Long.MAX_VALUE }
             .take(limitPerSection)
 
-        return HomeSurface(
-            surfaced = surfaced,
-            needsYou = needsYou,
-            waitingOn = waitingOn,
-            upcoming = upcoming,
-        )
+        return HomeSurface(surfaced, needsYou, waitingOn, upcoming)
     }
 
     private fun surfaceKey(loop: OpenLoop): String {
@@ -77,7 +66,6 @@ object HomeSurfacePolicy {
             containsAny(text, "fraud", "suspicious", "security", "unauthorized", "احتيال", "مشبوه", "غير مصرح") -> "security"
             containsAny(text, "transfer", "bank transfer", "تحويل", "حوالة") -> "transfer"
             containsAny(text, "invoice", "bill", "فاتورة") -> "invoice"
-            containsAny(text, "card", "credit card", "بطاقة", "كارت") -> "card-payment"
             loop.kind == OpenLoopKind.PAYMENT -> "payment"
             loop.kind == OpenLoopKind.FAILURE -> "failure"
             loop.kind == OpenLoopKind.DELIVERY -> "delivery"

@@ -111,6 +111,9 @@ class OfflineNexusRepository @Inject constructor(
     override suspend fun rejectAction(id: String) =
         transitionAction(id, ActionState.REJECTED, FeedbackSignal.REJECTED)
 
+    override suspend fun resolveAction(id: String) =
+        transitionAction(id, ActionState.REJECTED, FeedbackSignal.RESOLVED)
+
     override suspend fun startAction(id: String) =
         transitionAction(id, ActionState.EXECUTING, FeedbackSignal.STARTED)
 
@@ -129,10 +132,20 @@ class OfflineNexusRepository @Inject constructor(
         val clean = rawText.trim().replace(Regex("\\s+"), " ")
         if (clean.isBlank()) return@withTransaction
 
-        val identity = if (type == ObservationType.APP_USAGE) {
-            "${type.name}|${source.orEmpty()}"
-        } else {
-            "${type.name}|${source.orEmpty()}|$clean"
+        val identity = when (type) {
+            ObservationType.APP_USAGE -> "${type.name}|${source.orEmpty()}"
+            ObservationType.NOTIFICATION -> {
+                val metadata = runCatching { JSONObject(metadataJson) }.getOrNull()
+                val postedAt = metadata?.optLong("postedAt", 0L)?.takeIf { it > 0L }
+                val key = metadata?.optString("key").orEmpty().takeIf { it.isNotBlank() }
+                val eventIdentity = postedAt?.toString() ?: key.orEmpty()
+                if (eventIdentity.isBlank()) {
+                    "${type.name}|${source.orEmpty()}|$clean"
+                } else {
+                    "${type.name}|${source.orEmpty()}|$clean|$eventIdentity"
+                }
+            }
+            else -> "${type.name}|${source.orEmpty()}|$clean"
         }
 
         val digest = MessageDigest.getInstance("SHA-256")

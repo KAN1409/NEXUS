@@ -29,6 +29,24 @@ interface NexusDao {
     @Insert(onConflict = OnConflictStrategy.REPLACE)
     suspend fun addFeedback(entity: FeedbackEntity)
 
+    @Insert(onConflict = OnConflictStrategy.REPLACE)
+    suspend fun upsertObservationUnderstanding(entity: ObservationUnderstandingEntity)
+
+    @Insert(onConflict = OnConflictStrategy.REPLACE)
+    suspend fun upsertSituation(entity: SituationEntity)
+
+    @Insert(onConflict = OnConflictStrategy.REPLACE)
+    suspend fun upsertSituationMembers(entities: List<SituationMemberEntity>)
+
+    @Query("SELECT * FROM observation_understanding ORDER BY priority DESC, analyzedAt DESC")
+    fun observeObservationUnderstandings(): Flow<List<ObservationUnderstandingEntity>>
+
+    @Query("SELECT * FROM situations WHERE state IN ('OPEN','SNOOZED','IN_PROGRESS') ORDER BY priority DESC, lastUpdatedAt DESC")
+    fun observeOpenSituations(): Flow<List<SituationEntity>>
+
+    @Query("SELECT * FROM situation_members WHERE situationId = :situationId")
+    suspend fun situationMembers(situationId: String): List<SituationMemberEntity>
+
     @Query("SELECT * FROM observations ORDER BY createdAt DESC LIMIT :limit")
     fun observeRecentObservations(limit: Int = 100): Flow<List<ObservationEntity>>
 
@@ -71,7 +89,7 @@ interface NexusDao {
         AND EXISTS (
             SELECT 1 FROM feedback
             WHERE feedback.targetId = actions.id
-            AND feedback.signal = 'DEFERRED'
+            AND feedback.signal IN ('DEFERRED','SAVED')
             GROUP BY feedback.targetId
             HAVING MAX(feedback.createdAt) <= :cutoff
         )
@@ -92,6 +110,15 @@ interface NexusDao {
 
     @Query("DELETE FROM discoveries")
     suspend fun clearDiscoveries()
+
+    @Query("DELETE FROM observation_understanding")
+    suspend fun clearObservationUnderstandings()
+
+    @Query("DELETE FROM situation_members")
+    suspend fun clearSituationMembers()
+
+    @Query("DELETE FROM situations")
+    suspend fun clearSituations()
 
     @Query("DELETE FROM observations WHERE type = 'APP_USAGE' AND source = :source AND id != :keepId")
     suspend fun deleteOtherUsageSnapshots(source: String, keepId: String)

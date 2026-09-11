@@ -36,7 +36,6 @@ fun NexusApp(viewModel: CaptureViewModel = hiltViewModel()) {
     val state by viewModel.state.collectAsStateWithLifecycle()
     val context = androidx.compose.ui.platform.LocalContext.current
     val snackbars = remember { SnackbarHostState() }
-    var savedRevision by remember { mutableIntStateOf(state.saveRevision) }
 
     val imagePicker = rememberLauncherForActivityResult(ActivityResultContracts.GetContent()) { uri ->
         if (uri != null) {
@@ -44,6 +43,8 @@ fun NexusApp(viewModel: CaptureViewModel = hiltViewModel()) {
                 .setType("image/*")
                 .putExtra(Intent.EXTRA_STREAM, uri)
                 .addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
+            showCapture = false
+            draft = ""
             viewModel.ingestShare(shareIntent)
         }
     }
@@ -54,14 +55,6 @@ fun NexusApp(viewModel: CaptureViewModel = hiltViewModel()) {
         state.message?.let {
             snackbars.showSnackbar(it)
             viewModel.clearMessage()
-        }
-    }
-
-    LaunchedEffect(state.saveRevision) {
-        if (state.saveRevision > savedRevision) {
-            showCapture = false
-            draft = ""
-            savedRevision = state.saveRevision
         }
     }
 
@@ -125,7 +118,14 @@ fun NexusApp(viewModel: CaptureViewModel = hiltViewModel()) {
                 draft = draft,
                 onDraftChange = { draft = it },
                 busy = state.busy,
-                onSave = { viewModel.captureText(draft) },
+                onSave = {
+                    val value = draft.trim()
+                    if (value.isNotBlank() && !state.busy) {
+                        showCapture = false
+                        draft = ""
+                        viewModel.captureText(value)
+                    }
+                },
                 onAddImage = { imagePicker.launch("image/*") },
                 onBack = { showCapture = false },
             )

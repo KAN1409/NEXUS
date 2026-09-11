@@ -57,7 +57,9 @@ class CaptureViewModel @Inject constructor(
     }
 
     fun captureText(text: String) {
-        if (text.isBlank() || state.value.busy) return
+        if (text.isBlank()) return
+        // Never drop a user capture because a previous enrichment pass is still finishing.
+        // runOperation is serialized by gate, so rapid saves queue safely instead of being ignored.
         runOperation {
             repository.captureObservation(
                 if (text.trim().startsWith("https://") || text.trim().startsWith("http://")) {

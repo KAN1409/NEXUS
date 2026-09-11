@@ -42,7 +42,7 @@ Implemented in code:
 ## Installed-app invariants
 - Existing user data must be preserved.
 - No normal release may require uninstall.
-- The installed app has moved to a permanent NEXUS signing identity created outside the repository.
+- The installed app now uses the permanent NEXUS v2 signing identity created locally outside the repository after the one-time signer recovery on 2026-09-11.
 - The repository must never contain the private keystore or its password.
 
 ## Known gaps
@@ -53,4 +53,4 @@ Implemented in code:
 - Activity should eventually show a complete causal chain from observation to result.
 
 ## Next action
-Finish Update 5 build verification, then sign the produced APK with the permanent NEXUS key and test the complete action lifecycle on-device.
+Update 5 CI is green. Signer recovery is complete and the installed app is now on the permanent v2 signing identity. Next: verify on-device data preservation and run the complete Update 5 action-lifecycle acceptance.

@@ -73,6 +73,25 @@ fun HomeScreen(
             Text("For You", style = MaterialTheme.typography.headlineSmall, fontWeight = FontWeight.Bold)
         }
 
+        if (state.actions.isNotEmpty()) {
+            items(state.actions.take(2), key = { "home_action_" + it.id }) { action ->
+                Card(
+                    modifier = Modifier.fillMaxWidth(),
+                    colors = CardDefaults.cardColors(containerColor = NexusColors.SurfaceRaised),
+                    shape = androidx.compose.foundation.shape.RoundedCornerShape(NexusRadius.Medium),
+                ) {
+                    Column(
+                        Modifier.padding(NexusSpacing.Lg),
+                        verticalArrangement = Arrangement.spacedBy(NexusSpacing.Sm),
+                    ) {
+                        Text("READY FOR YOU", style = MaterialTheme.typography.labelMedium, color = NexusColors.Cyan)
+                        Text(action.title, style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold)
+                        Text(action.description, style = MaterialTheme.typography.bodyMedium, color = NexusColors.TextSecondary)
+                    }
+                }
+            }
+        }
+
         if (state.discoveries.isEmpty()) {
             item {
                 EmptyForYouCard()

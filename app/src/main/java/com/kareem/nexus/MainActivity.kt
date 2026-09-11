@@ -30,6 +30,6 @@ class MainActivity : ComponentActivity() {
 
     override fun onResume() {
         super.onResume()
-        captureViewModel.refreshUsageAccess()
+        captureViewModel.refreshAccessState()
     }
 }

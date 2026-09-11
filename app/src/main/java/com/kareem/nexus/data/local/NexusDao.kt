@@ -38,6 +38,9 @@ interface NexusDao {
     @Query("SELECT * FROM actions ORDER BY createdAt DESC LIMIT :limit")
     fun observeAllActions(limit: Int = 50): Flow<List<ActionEntity>>
 
+    @Query("SELECT * FROM feedback ORDER BY createdAt DESC LIMIT :limit")
+    fun observeFeedback(limit: Int = 200): Flow<List<FeedbackEntity>>
+
     @Query("DELETE FROM actions WHERE state = 'READY_FOR_APPROVAL'")
     suspend fun clearGeneratedActions()
 
@@ -49,6 +52,19 @@ interface NexusDao {
 
     @Query("UPDATE actions SET state = 'DRAFT', updatedAt = :updatedAt WHERE id = :id")
     suspend fun deferAction(id: String, updatedAt: Long)
+
+    @Query("""
+        SELECT actions.* FROM actions
+        WHERE actions.state = 'DRAFT'
+        AND EXISTS (
+            SELECT 1 FROM feedback
+            WHERE feedback.targetId = actions.id
+            AND feedback.signal = 'DEFERRED'
+            GROUP BY feedback.targetId
+            HAVING MAX(feedback.createdAt) <= :cutoff
+        )
+    """)
+    suspend fun deferredActionsReadyToResurface(cutoff: Long): List<ActionEntity>
 
     @Query("SELECT COUNT(*) FROM observations")
     fun observeObservationCount(): Flow<Int>
@@ -67,6 +83,9 @@ interface NexusDao {
 
     @Query("DELETE FROM observations WHERE type = 'APP_USAGE' AND source = :source AND id != :keepId")
     suspend fun deleteOtherUsageSnapshots(source: String, keepId: String)
+
+    @Query("DELETE FROM observations WHERE type = 'APP_USAGE' AND source NOT IN (:sources)")
+    suspend fun deleteUsageOutsideSources(sources: List<String>)
 
     @Query("""DELETE FROM observations
         WHERE type = 'APP_USAGE'

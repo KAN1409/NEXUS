@@ -44,6 +44,9 @@ interface NexusDao {
     @Query("DELETE FROM actions WHERE state = 'READY_FOR_APPROVAL'")
     suspend fun clearGeneratedActions()
 
+    @Query("UPDATE actions SET state = 'REJECTED', updatedAt = :updatedAt WHERE id LIKE 'action_focus_%' AND state IN ('READY_FOR_APPROVAL','DRAFT')")
+    suspend fun retireLegacyFocusActions(updatedAt: Long)
+
     @Query("SELECT * FROM actions WHERE id = :id LIMIT 1")
     suspend fun actionById(id: String): ActionEntity?
 

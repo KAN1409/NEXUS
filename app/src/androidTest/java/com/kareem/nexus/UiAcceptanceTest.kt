@@ -7,6 +7,7 @@ import androidx.test.platform.app.InstrumentationRegistry
 import com.kareem.nexus.core.NexusWorkTracker
 import java.io.FileInputStream
 import org.junit.After
+import org.junit.Assert.assertTrue
 import org.junit.Before
 import org.junit.Rule
 import org.junit.Test
@@ -60,15 +61,17 @@ class UiAcceptanceTest {
         add("CIB — payment of 5672 EGP is due today")
 
         compose.onNodeWithTag("home-feed", useUnmergedTree = true).assertExists()
-        // Room invalidation and Flow delivery happen after the capture transaction commits, so the
-        // pipeline can be idle a few frames before Home receives the new projection. Wait on the
-        // stable semantic identity of the value card rather than an arbitrary delay or list index.
         compose.waitUntil(15_000) {
             compose.onAllNodesWithTag("open-loop-payment", useUnmergedTree = true)
                 .fetchSemanticsNodes().isNotEmpty()
         }
         compose.onNodeWithTag("open-loop-payment", useUnmergedTree = true).assertExists()
-        compose.onNodeWithText("5672", substring = true, useUnmergedTree = true).assertExists()
+        // The amount intentionally appears in both the derived title and the evidence detail.
+        // Verify that at least one rendered semantic node contains it without requiring uniqueness.
+        assertTrue(
+            compose.onAllNodesWithText("5672", substring = true, useUnmergedTree = true)
+                .fetchSemanticsNodes().isNotEmpty()
+        )
         screenshot("01-home-value")
 
         compose.onNode(navItem("Memory"), useUnmergedTree = true).performClick()

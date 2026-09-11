@@ -42,7 +42,10 @@ class UiAcceptanceTest {
     }
 
     private fun scrollLazyListTo(matcher: SemanticsMatcher) {
-        compose.onNode(hasScrollAction(), useUnmergedTree = true).performScrollToNode(matcher)
+        // LazyColumn virtualizes offscreen descendants. Scroll the item container that owns the
+        // matching descendant, then assert the actual child once the item has been composed.
+        compose.onNode(hasScrollAction(), useUnmergedTree = true)
+            .performScrollToNode(hasAnyDescendant(matcher))
         compose.waitForIdle()
     }
 

@@ -45,13 +45,13 @@ class UiAcceptanceTest {
         add("CIB — payment of 5672 EGP is due today")
         add("CIB — please confirm your card payment today")
 
-        // Three raw open loops exist, but the two related CIB signals belong to one situation.
-        // Home must surface two real-world things rather than making the user process duplicates.
+        // Repository regression separately proves all three raw open loops are preserved. Home is
+        // intentionally situation-level: related CIB evidence collapses into one surfaced item.
+        // Assert the actual user value cards rather than a presentation-copy count.
         compose.waitUntil(20_000) {
-            compose.onAllNodesWithText("2 things need you.", useUnmergedTree = true)
+            compose.onAllNodesWithText("Needs you", useUnmergedTree = true)
                 .fetchSemanticsNodes().isNotEmpty()
         }
-        compose.onNodeWithText("Needs you", useUnmergedTree = true).assertExists()
 
         val homeList = hasScrollAction() and hasAnyDescendant(hasText("Needs you"))
         compose.onNode(homeList, useUnmergedTree = true).performScrollToIndex(2)

@@ -120,7 +120,7 @@ fun NexusApp(viewModel: CaptureViewModel = hiltViewModel()) {
                 busy = state.busy,
                 onSave = {
                     val value = draft.trim()
-                    if (value.isNotBlank() && !state.busy) {
+                    if (value.isNotBlank()) {
                         showCapture = false
                         draft = ""
                         viewModel.captureText(value)

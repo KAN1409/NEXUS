@@ -70,6 +70,18 @@ class CaptureViewModel @Inject constructor(
         )
     }
 
+    fun refreshContext() {
+        viewModelScope.launch {
+            val usageAccess = usageReader.hasAccess()
+            val notificationAccess = usageReader.hasNotificationAccess()
+            _state.update { it.copy(usageAccess = usageAccess, notificationAccess = notificationAccess) }
+            if (usageAccess) {
+                usageReader.captureLast24Hours()
+            }
+            repository.rebuildUnderstanding()
+        }
+    }
+
     fun captureUsage() {
         viewModelScope.launch {
             _state.update { it.copy(busy = true) }

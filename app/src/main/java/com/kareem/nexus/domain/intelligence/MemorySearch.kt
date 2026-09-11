@@ -33,7 +33,7 @@ object MemorySearch {
         val tokens = rawTokens.filterNot { it in stopWords }.ifEmpty { rawTokens }
         val numericTokens = tokens.filter { token -> token.any(Char::isDigit) }
 
-        // Numbers are excellent memory anchors. If the user remembers 5672, require it.
+        // Remembered numbers are high-signal anchors: when present, the evidence must contain them.
         if (numericTokens.any { token -> !haystack.contains(token) }) return 0
 
         var matched = 0
@@ -54,10 +54,10 @@ object MemorySearch {
 
         if (matched == 0) return 0
         val requiredMatches = when {
-            numericTokens.isNotEmpty() -> 1
-            tokens.size <= 2 -> 1
+            numericTokens.isNotEmpty() && tokens.size > 1 -> 2
+            tokens.size <= 2 -> tokens.size
             else -> (tokens.size + 1) / 2
-        }
+        }.coerceAtLeast(1)
         if (matched < requiredMatches) return 0
 
         return total + matched * 6

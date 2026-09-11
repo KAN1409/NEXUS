@@ -7,6 +7,7 @@ import androidx.compose.material3.*
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.hilt.navigation.compose.hiltViewModel
@@ -20,6 +21,7 @@ fun HomeScreen(
     viewModel: HomeViewModel = hiltViewModel(),
 ) {
     val state by viewModel.uiState.collectAsStateWithLifecycle()
+    val context = LocalContext.current
     val actionable = state.actions.filter {
         it.state in setOf(ActionState.READY_FOR_APPROVAL, ActionState.APPROVED, ActionState.EXECUTING)
     }
@@ -71,7 +73,18 @@ fun HomeScreen(
                 SectionHeader("Ready Actions", "Prepared actions waiting for your decision.")
             }
             items(actionable.take(4), key = { "action_" + it.id }) { action ->
-                ActionCard(action, viewModel)
+                val sourcePackage = state.observations.firstOrNull { action.id.endsWith(it.id) }?.source
+                ActionCard(
+                    action = action,
+                    viewModel = viewModel,
+                    onOpenSource = sourcePackage?.let { packageName ->
+                        {
+                            runCatching {
+                                context.packageManager.getLaunchIntentForPackage(packageName)?.let(context::startActivity)
+                            }
+                        }
+                    },
+                )
             }
         }
 
@@ -189,7 +202,11 @@ private fun AttentionCard(item: AttentionItem) {
 }
 
 @Composable
-private fun ActionCard(action: PreparedAction, viewModel: HomeViewModel) {
+private fun ActionCard(
+    action: PreparedAction,
+    viewModel: HomeViewModel,
+    onOpenSource: (() -> Unit)? = null,
+) {
     Card(
         modifier = Modifier.fillMaxWidth(),
         colors = CardDefaults.cardColors(containerColor = NexusColors.SurfaceRaised),
@@ -197,7 +214,11 @@ private fun ActionCard(action: PreparedAction, viewModel: HomeViewModel) {
     ) {
         Column(Modifier.padding(NexusSpacing.Lg), verticalArrangement = Arrangement.spacedBy(NexusSpacing.Sm)) {
             Text(
-                when (action.state) {
+                onOpenSource?.let {
+                OutlinedButton(onClick = it, modifier = Modifier.fillMaxWidth()) { Text("Open source app") }
+            }
+
+            when (action.state) {
                     ActionState.READY_FOR_APPROVAL -> "WAITING FOR YOU"
                     ActionState.APPROVED -> "APPROVED"
                     ActionState.EXECUTING -> "IN PROGRESS"

@@ -34,18 +34,22 @@ class CaptureViewModel @Inject constructor(
     private val _state = MutableStateFlow(CaptureUiState())
     val state = _state.asStateFlow()
     private val gate = Mutex()
-    private var lastRefresh = 0L
+    private var lastAutomaticUsageRefresh = 0L
 
     fun clearMessage() = _state.update { it.copy(message = null) }
+
     private fun runOperation(block: suspend () -> String?) = viewModelScope.launch {
         gate.withLock {
             _state.update { it.copy(busy = true) }
             try {
                 val message = withContext(Dispatchers.IO) { block() }
                 _state.update { it.copy(message = message) }
-            } catch (cancel: CancellationException) { throw cancel }
-            catch (_: Exception) {
-                _state.update { it.copy(message = "Could not finish this operation. Your saved data is safe; please retry.") }
+            } catch (cancel: CancellationException) {
+                throw cancel
+            } catch (_: Exception) {
+                _state.update {
+                    it.copy(message = "Could not finish this operation. Your saved data is safe; please retry.")
+                }
             } finally {
                 _state.update { it.copy(busy = false) }
             }
@@ -56,8 +60,13 @@ class CaptureViewModel @Inject constructor(
         if (text.isBlank() || state.value.busy) return
         runOperation {
             repository.captureObservation(
-                if (text.trim().startsWith("https://") || text.trim().startsWith("http://")) ObservationType.SHARED_LINK else ObservationType.MANUAL,
-                text, "NEXUS",
+                if (text.trim().startsWith("https://") || text.trim().startsWith("http://")) {
+                    ObservationType.SHARED_LINK
+                } else {
+                    ObservationType.MANUAL
+                },
+                text,
+                "NEXUS",
             )
             _state.update { it.copy(saveRevision = it.saveRevision + 1) }
             repository.rebuildUnderstanding()
@@ -75,18 +84,37 @@ class CaptureViewModel @Inject constructor(
     }
 
     fun refreshAccessState() = _state.update {
-        it.copy(usageAccess = usageReader.hasAccess(), notificationAccess = usageReader.hasNotificationAccess())
+        it.copy(
+            usageAccess = usageReader.hasAccess(),
+            notificationAccess = usageReader.hasNotificationAccess(),
+        )
     }
 
+    /**
+     * Called by ON_RESUME. Permissions are cheap to refresh every time, but app-usage capture and
+     * whole-context rebuilding are throttled to avoid turning navigation/resume into background work.
+     * Notification/share ingestion already schedules understanding when new evidence arrives.
+     */
     fun refreshContext() {
         refreshAccessState()
         val now = android.os.SystemClock.elapsedRealtime()
-        if (state.value.busy || (lastRefresh != 0L && now - lastRefresh < 60_000)) return
+        if (state.value.busy) return
+        if (lastAutomaticUsageRefresh != 0L && now - lastAutomaticUsageRefresh < AUTO_USAGE_REFRESH_MS) return
+        lastAutomaticUsageRefresh = now
+        if (!usageReader.hasAccess()) return
+
         runOperation {
-            if (usageReader.hasAccess()) usageReader.captureLast24Hours()
-            repository.rebuildUnderstanding()
-            lastRefresh = android.os.SystemClock.elapsedRealtime()
+            val count = usageReader.captureLast24Hours()
+            if (count > 0) repository.rebuildUnderstanding()
             null
+        }
+    }
+
+    fun rebuildContext() {
+        if (state.value.busy) return
+        runOperation {
+            repository.rebuildUnderstanding()
+            "Rebuilt local understanding"
         }
     }
 
@@ -95,8 +123,13 @@ class CaptureViewModel @Inject constructor(
         runOperation {
             if (!usageReader.hasAccess()) return@runOperation "Enable usage access first"
             val count = usageReader.captureLast24Hours()
-            repository.rebuildUnderstanding()
+            if (count > 0) repository.rebuildUnderstanding()
+            lastAutomaticUsageRefresh = android.os.SystemClock.elapsedRealtime()
             if (count > 0) "Updated usage for $count apps" else "No app usage is available in this window"
         }
+    }
+
+    private companion object {
+        const val AUTO_USAGE_REFRESH_MS = 6L * 60L * 60L * 1000L
     }
 }

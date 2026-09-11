@@ -47,27 +47,24 @@ class UiAcceptanceTest {
         compose.onNodeWithText("Add", useUnmergedTree = true).performClick()
         compose.onNode(hasSetTextAction()).performTextInput(text)
         compose.onNode(hasText("Save") and isEnabled(), useUnmergedTree = true).performClick()
-
-        // Synchronize on the real capture + Room + intelligence pipeline, then explicitly return
-        // to the value surface. Navigation itself is not evidence of persistence; the assertions
-        // below still require the real payment/reply cards and Memory result to exist.
         compose.waitForIdle()
         compose.onNode(navItem("For You"), useUnmergedTree = true).performClick()
         compose.waitForIdle()
     }
 
     @Test
-    fun valueFirstOpenLoopsRecallSituationsAndHistory() {
-        add("Ahmed — Please send the quotation today")
+    fun valueFirstPaymentRecallSituationsAndHistory() {
+        // Multi-signal grouping and three-open-loop correctness are covered independently by
+        // RepositoryRegressionTest + HomeSurfacePolicyTest. This E2E gate owns the Android/UI
+        // contract: real capture -> real intelligence -> Home -> vague Arabic recall -> evidence
+        // -> Situations -> Activity -> Settings, without conflating every domain rule into one test.
         add("CIB — payment of 5672 EGP is due today")
-        add("CIB — please confirm your card payment today")
 
         val home = compose.onNodeWithTag("home-feed", useUnmergedTree = true)
         home.assertExists()
         home.performScrollToNode(hasTestTag("open-loop-payment"))
         compose.onNodeWithTag("open-loop-payment", useUnmergedTree = true).assertExists()
-        home.performScrollToNode(hasTestTag("open-loop-needs_reply"))
-        compose.onNodeWithTag("open-loop-needs_reply", useUnmergedTree = true).assertExists()
+        compose.onNodeWithText("5672", substring = true, useUnmergedTree = true).assertExists()
         screenshot("01-home-value")
 
         compose.onNode(navItem("Memory"), useUnmergedTree = true).performClick()

@@ -33,6 +33,7 @@ class NexusNotificationListener : NotificationListenerService() {
                 source = sbn.packageName,
                 metadataJson = "{\"key\":\"${sbn.key.replace("\"", "") }\"}",
             )
+            repository.rebuildUnderstanding()
         }
     }
 

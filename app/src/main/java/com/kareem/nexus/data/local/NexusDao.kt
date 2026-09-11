@@ -44,6 +44,9 @@ interface NexusDao {
     @Query("SELECT * FROM actions ORDER BY createdAt DESC LIMIT :limit")
     fun observeAllActions(limit: Int = Int.MAX_VALUE): Flow<List<ActionEntity>>
 
+    @Query("SELECT * FROM actions ORDER BY createdAt DESC")
+    suspend fun actionsOnce(): List<ActionEntity>
+
     @Query("SELECT * FROM feedback ORDER BY createdAt DESC LIMIT :limit")
     fun observeFeedback(limit: Int = 200): Flow<List<FeedbackEntity>>
 

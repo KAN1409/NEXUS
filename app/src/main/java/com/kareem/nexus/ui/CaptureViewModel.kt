@@ -18,6 +18,7 @@ data class CaptureUiState(
     val message: String? = null,
     val busy: Boolean = false,
     val usageAccess: Boolean = false,
+    val notificationAccess: Boolean = false,
 )
 
 @HiltViewModel
@@ -26,7 +27,12 @@ class CaptureViewModel @Inject constructor(
     private val shareIngestor: ShareIngestor,
     private val usageReader: UsageObservationReader,
 ) : ViewModel() {
-    private val _state = MutableStateFlow(CaptureUiState(usageAccess = usageReader.hasAccess()))
+    private val _state = MutableStateFlow(
+        CaptureUiState(
+            usageAccess = usageReader.hasAccess(),
+            notificationAccess = usageReader.hasNotificationAccess(),
+        )
+    )
     val state: StateFlow<CaptureUiState> = _state.asStateFlow()
 
     init {
@@ -57,14 +63,26 @@ class CaptureViewModel @Inject constructor(
         }
     }
 
-    fun refreshUsageAccess() = _state.update { it.copy(usageAccess = usageReader.hasAccess()) }
+    fun refreshAccessState() = _state.update {
+        it.copy(
+            usageAccess = usageReader.hasAccess(),
+            notificationAccess = usageReader.hasNotificationAccess(),
+        )
+    }
 
     fun captureUsage() {
         viewModelScope.launch {
             _state.update { it.copy(busy = true) }
             val count = usageReader.captureLast24Hours()
             if (count > 0) repository.rebuildUnderstanding()
-            _state.update { it.copy(busy = false, usageAccess = usageReader.hasAccess(), message = if (count > 0) "Understood $count apps" else "Usage access is required") }
+            _state.update {
+                it.copy(
+                    busy = false,
+                    usageAccess = usageReader.hasAccess(),
+                    notificationAccess = usageReader.hasNotificationAccess(),
+                    message = if (count > 0) "Understood $count apps" else "Usage access is required",
+                )
+            }
         }
     }
 }

@@ -8,6 +8,7 @@ import com.kareem.nexus.domain.repository.NexusRepository
 import com.kareem.nexus.ingest.ShareIngestor
 import com.kareem.nexus.observe.UsageObservationReader
 import dagger.hilt.android.lifecycle.HiltViewModel
+import java.util.concurrent.atomic.AtomicInteger
 import javax.inject.Inject
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Dispatchers
@@ -34,24 +35,35 @@ class CaptureViewModel @Inject constructor(
     private val _state = MutableStateFlow(CaptureUiState())
     val state = _state.asStateFlow()
     private val gate = Mutex()
+    private val pendingOperations = AtomicInteger(0)
     private var lastAutomaticUsageRefresh = 0L
 
     fun clearMessage() = _state.update { it.copy(message = null) }
 
-    private fun runOperation(block: suspend () -> String?) = viewModelScope.launch {
-        gate.withLock {
-            _state.update { it.copy(busy = true) }
+    private fun runOperation(block: suspend () -> String?) {
+        // Mark the queue busy synchronously. This prevents a second UI action from observing a
+        // false idle gap while a previous operation is still being dispatched or another one is queued.
+        pendingOperations.incrementAndGet()
+        _state.update { it.copy(busy = true) }
+
+        viewModelScope.launch {
             try {
-                val message = withContext(Dispatchers.IO) { block() }
-                _state.update { it.copy(message = message) }
-            } catch (cancel: CancellationException) {
-                throw cancel
-            } catch (_: Exception) {
-                _state.update {
-                    it.copy(message = "Could not finish this operation. Your saved data is safe; please retry.")
+                gate.withLock {
+                    try {
+                        val message = withContext(Dispatchers.IO) { block() }
+                        _state.update { it.copy(message = message) }
+                    } catch (cancel: CancellationException) {
+                        throw cancel
+                    } catch (_: Exception) {
+                        _state.update {
+                            it.copy(message = "Could not finish this operation. Your saved data is safe; please retry.")
+                        }
+                    }
                 }
             } finally {
-                _state.update { it.copy(busy = false) }
+                if (pendingOperations.decrementAndGet() == 0) {
+                    _state.update { it.copy(busy = false) }
+                }
             }
         }
     }

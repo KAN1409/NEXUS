@@ -5,6 +5,7 @@ import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
+import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
@@ -14,14 +15,38 @@ import com.kareem.nexus.core.model.Observation
 import com.kareem.nexus.core.model.ObservationType
 import com.kareem.nexus.ui.design.NexusColors
 
+private enum class MemoryFilter(val label: String) {
+    ALL("All"),
+    NOTIFICATIONS("Notifications"),
+    NOTES("Notes"),
+    LINKS("Links"),
+}
+
+@OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun ObservationsScreen(
     contentPadding: PaddingValues,
     viewModel: HomeViewModel = hiltViewModel(),
 ) {
     val state by viewModel.uiState.collectAsStateWithLifecycle()
+    var query by rememberSaveable { mutableStateOf("") }
+    var filter by rememberSaveable { mutableStateOf(MemoryFilter.ALL) }
+
     val usage = state.observations.filter { it.type == ObservationType.APP_USAGE }
-    val memories = state.observations.filterNot { it.type == ObservationType.APP_USAGE }
+    val memories = state.observations
+        .filterNot { it.type == ObservationType.APP_USAGE }
+        .filter { observation ->
+            val filterMatch = when (filter) {
+                MemoryFilter.ALL -> true
+                MemoryFilter.NOTIFICATIONS -> observation.type == ObservationType.NOTIFICATION
+                MemoryFilter.NOTES -> observation.type == ObservationType.MANUAL || observation.type == ObservationType.SHARED_TEXT
+                MemoryFilter.LINKS -> observation.type == ObservationType.SHARED_LINK
+            }
+            val queryMatch = query.isBlank() ||
+                observation.rawText.contains(query, ignoreCase = true) ||
+                observation.source.orEmpty().contains(query, ignoreCase = true)
+            filterMatch && queryMatch
+        }
 
     LazyColumn(
         modifier = Modifier.fillMaxSize(),
@@ -36,14 +61,31 @@ fun ObservationsScreen(
         item {
             Text("Memory", style = MaterialTheme.typography.headlineLarge, fontWeight = FontWeight.Bold)
             Text(
-                "What NEXUS has observed so far.",
+                "Search everything NEXUS has observed locally.",
                 color = NexusColors.TextSecondary,
                 style = MaterialTheme.typography.titleMedium,
             )
-            Spacer(Modifier.height(16.dp))
+            Spacer(Modifier.height(12.dp))
+            OutlinedTextField(
+                value = query,
+                onValueChange = { query = it },
+                modifier = Modifier.fillMaxWidth(),
+                singleLine = true,
+                label = { Text("Search memory") },
+            )
+            Spacer(Modifier.height(10.dp))
+            Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                MemoryFilter.entries.forEach { item ->
+                    FilterChip(
+                        selected = filter == item,
+                        onClick = { filter = item },
+                        label = { Text(item.label) },
+                    )
+                }
+            }
         }
 
-        if (usage.isNotEmpty()) {
+        if (usage.isNotEmpty() && query.isBlank() && filter == MemoryFilter.ALL) {
             item(key = "usage_summary") {
                 Surface(
                     modifier = Modifier.fillMaxWidth(),
@@ -56,20 +98,16 @@ fun ObservationsScreen(
                     ) {
                         Text("APP USAGE SUMMARY", color = NexusColors.Violet, style = MaterialTheme.typography.labelLarge)
                         Text(
-                            "Top apps from the latest 24-hour usage snapshot",
+                            "Top apps from the latest 24-hour snapshot",
                             style = MaterialTheme.typography.titleMedium,
                             fontWeight = FontWeight.Bold,
                         )
                         usage.take(6).forEach { observation ->
-                            Text(
-                                observation.rawText,
-                                color = NexusColors.TextSecondary,
-                                style = MaterialTheme.typography.bodyMedium,
-                            )
+                            Text(observation.rawText, color = NexusColors.TextSecondary)
                         }
                         if (usage.size > 6) {
                             Text(
-                                "+${usage.size - 6} more apps",
+                                "+" + (usage.size - 6) + " more apps",
                                 color = NexusColors.TextSecondary,
                                 style = MaterialTheme.typography.bodySmall,
                             )
@@ -79,11 +117,11 @@ fun ObservationsScreen(
             }
         }
 
-        if (memories.isEmpty() && usage.isEmpty()) {
+        if (memories.isEmpty()) {
             item {
                 Surface(color = NexusColors.Surface, shape = MaterialTheme.shapes.large) {
                     Text(
-                        "Share a link, text or image to NEXUS. Your captured context will appear here.",
+                        if (query.isBlank()) "No memories match this filter yet." else "No memory matches your search.",
                         modifier = Modifier.padding(20.dp),
                         color = NexusColors.TextSecondary,
                     )
@@ -113,7 +151,7 @@ fun ObservationsScreen(
                         color = NexusColors.Violet,
                         style = MaterialTheme.typography.labelLarge,
                     )
-                    Text(observation.rawText, maxLines = 5, style = MaterialTheme.typography.bodyLarge)
+                    Text(observation.rawText, maxLines = 6, style = MaterialTheme.typography.bodyLarge)
                     observation.source?.let {
                         Text(it, color = NexusColors.TextSecondary, style = MaterialTheme.typography.bodySmall)
                     }

@@ -13,6 +13,7 @@ import androidx.compose.ui.unit.dp
 import androidx.hilt.lifecycle.viewmodel.compose.hiltViewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.kareem.nexus.core.model.Observation
+import com.kareem.nexus.core.model.SignalKind
 import com.kareem.nexus.ui.design.*
 
 @Composable
@@ -21,7 +22,7 @@ fun DiscoverScreen(contentPadding: PaddingValues, viewModel: HomeViewModel = hil
     var expanded by remember { mutableStateOf<String?>(null) }
     var selected by remember { mutableStateOf<Observation?>(null) }
     var filter by rememberSaveable { mutableStateOf("All") }
-    val filters = listOf("All", "Situations", "Themes", "Insights")
+    val filters = listOf("All", "Situations", "Changes", "Themes")
 
     LazyColumn(
         modifier = Modifier.fillMaxSize().padding(contentPadding),
@@ -31,7 +32,7 @@ fun DiscoverScreen(contentPadding: PaddingValues, viewModel: HomeViewModel = hil
         item {
             NexusScreenHeader(
                 title = "Discover",
-                subtitle = "Patterns, threads and connections grounded in your context.",
+                subtitle = "The people, projects and situations NEXUS connected from your evidence.",
             )
             Spacer(Modifier.height(14.dp))
             LazyRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
@@ -45,17 +46,20 @@ fun DiscoverScreen(contentPadding: PaddingValues, viewModel: HomeViewModel = hil
             }
         }
 
-        if ((filter == "All" || filter == "Situations") && state.situations.isNotEmpty()) {
+        if ((filter == "All" || filter == "Situations") && state.contextSituations.isNotEmpty()) {
             item {
                 NexusSectionHeader(
                     title = "Connected situations",
-                    subtitle = "Multiple observations that appear to belong to the same real-world thread.",
+                    subtitle = "Several signals collapsed into one thread so you can understand the situation, not the notifications.",
                 )
             }
-            items(state.situations, key = { it.id }) { situation ->
-                NexusCard(accent = NexusColors.Cyan) {
+            items(state.contextSituations, key = { it.id }) { situation ->
+                NexusCard(accent = if (situation.priority >= .8) NexusColors.Amber else NexusColors.Cyan) {
                     Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
-                        NexusStatusPill("CONNECTED", NexusColors.Cyan)
+                        NexusStatusPill(
+                            if (situation.priority >= .8) "NEEDS ATTENTION" else "CONNECTED",
+                            if (situation.priority >= .8) NexusColors.Amber else NexusColors.Cyan,
+                        )
                         Text(
                             "${situation.observationIds.size} signals",
                             style = MaterialTheme.typography.labelSmall,
@@ -64,14 +68,22 @@ fun DiscoverScreen(contentPadding: PaddingValues, viewModel: HomeViewModel = hil
                     }
                     Text(situation.title, style = MaterialTheme.typography.titleLarge, fontWeight = FontWeight.Bold)
                     Text(situation.summary, color = NexusColors.TextSecondary)
-                    TextButton(onClick = {
-                        expanded = if (expanded == situation.id) null else situation.id
-                    }) {
-                        Text(if (expanded == situation.id) "Hide evidence" else "See source signals")
+
+                    if (situation.facts.isNotEmpty()) {
+                        LazyRow(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                            items(situation.facts.take(5), key = { "${it.kind}:${it.normalizedValue}" }) { fact ->
+                                NexusStatusPill(fact.value, NexusColors.Mint)
+                            }
+                        }
+                    }
+
+                    TextButton(onClick = { expanded = if (expanded == situation.id) null else situation.id }) {
+                        Text(if (expanded == situation.id) "Hide evidence" else "See source evidence")
                     }
                     if (expanded == situation.id) {
                         state.observations
                             .filter { it.id in situation.observationIds }
+                            .sortedByDescending { it.createdAt }
                             .forEach { observation ->
                                 HorizontalDivider(color = NexusColors.BorderSoft)
                                 TextButton(
@@ -93,19 +105,34 @@ fun DiscoverScreen(contentPadding: PaddingValues, viewModel: HomeViewModel = hil
             }
         }
 
-        if ((filter == "All" || filter == "Insights") && state.insights.isNotEmpty()) {
+        if ((filter == "All" || filter == "Changes") && state.topOfMind.isNotEmpty()) {
             item {
                 NexusSectionHeader(
                     title = "What changed",
-                    subtitle = "Evidence-backed findings rather than generic categories.",
+                    subtitle = "Current evidence that may change what you do next.",
                 )
             }
-            items(state.insights.take(6), key = { it.id }) { insight ->
-                NexusCard(accent = NexusColors.Mint) {
-                    NexusStatusPill("INSIGHT", NexusColors.Mint)
-                    Text(insight.title, style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold)
-                    Text(insight.summary, color = NexusColors.TextSecondary)
-                    Text(insight.evidence, color = NexusColors.Mint, style = MaterialTheme.typography.labelMedium)
+            items(state.topOfMind.take(5), key = { "change_${it.id}" }) { item ->
+                val accent = when (item.kind) {
+                    SignalKind.PAYMENT, SignalKind.FAILURE -> NexusColors.Amber
+                    SignalKind.REQUEST -> NexusColors.Cyan
+                    SignalKind.APPOINTMENT -> NexusColors.Violet
+                    else -> NexusColors.Mint
+                }
+                NexusCard(accent = accent) {
+                    Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
+                        NexusStatusPill(item.kind.name.replace('_', ' '), accent)
+                        Text(
+                            "${(item.confidence * 100).toInt()}% confidence",
+                            color = NexusColors.TextMuted,
+                            style = MaterialTheme.typography.labelSmall,
+                        )
+                    }
+                    Text(item.title, style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold)
+                    ContentText(item.summary, maxLines = 4)
+                    TextButton(onClick = {
+                        selected = state.observations.firstOrNull { it.id == item.observationId }
+                    }) { Text("View evidence") }
                 }
             }
         }
@@ -113,47 +140,30 @@ fun DiscoverScreen(contentPadding: PaddingValues, viewModel: HomeViewModel = hil
         if ((filter == "All" || filter == "Themes") && state.interests.isNotEmpty()) {
             item {
                 NexusSectionHeader(
-                    title = "Recurring themes",
-                    subtitle = "Relative prominence in recent signals, not a certainty score.",
+                    title = "Background themes",
+                    subtitle = "Longer-term context. These are supporting signals, not tasks.",
                 )
             }
-            items(state.interests, key = { it.id }) { interest ->
+            items(state.interests.take(6), key = { it.id }) { interest ->
                 NexusCard {
                     val prominence = interest.affinity.toFloat().coerceIn(0f, 1f)
-                    val status = when {
-                        prominence >= .80f -> "TRENDING"
-                        prominence >= .55f -> "ACTIVE"
-                        else -> "EMERGING"
-                    }
-                    val accent = when (status) {
-                        "TRENDING" -> NexusColors.Violet
-                        "ACTIVE" -> NexusColors.Cyan
-                        else -> NexusColors.Mint
-                    }
-                    Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
-                        NexusStatusPill(status, accent)
-                        Text(
-                            "${(prominence * 100).toInt()}% prominence",
-                            color = NexusColors.TextMuted,
-                            style = MaterialTheme.typography.labelSmall,
-                        )
-                    }
+                    val accent = if (prominence >= .7f) NexusColors.Violet else NexusColors.Mint
                     NexusProgressRow(
                         title = interest.label,
                         progress = prominence,
-                        detail = "${(interest.confidence * 100).toInt()}% confidence",
+                        detail = "${(prominence * 100).toInt()}% prominence",
                         accent = accent,
                     )
                 }
             }
         }
 
-        if (state.interests.isEmpty() && state.situations.isEmpty() && state.insights.isEmpty()) {
+        if (state.contextSituations.isEmpty() && state.topOfMind.isEmpty() && state.interests.isEmpty()) {
             item {
                 NexusCard {
-                    Text("Not enough context yet", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold)
+                    Text("No meaningful connection yet", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold)
                     Text(
-                        "Add notes or connect notifications. Discover will stay quiet until there is enough evidence for a useful connection.",
+                        "NEXUS will wait for enough evidence instead of inventing patterns from one notification.",
                         color = NexusColors.TextSecondary,
                     )
                 }

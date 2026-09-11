@@ -11,7 +11,6 @@ import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.runtime.saveable.rememberSaveable
-import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
@@ -19,12 +18,11 @@ import androidx.hilt.lifecycle.viewmodel.compose.hiltViewModel
 import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.compose.LifecycleEventEffect
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
-import com.kareem.nexus.BuildConfig
 import com.kareem.nexus.ui.design.*
 
 private enum class NexusDestination(val label: String, val icon: NexusIconType) {
     ForYou("For You", NexusIconType.Home),
-    Discover("Discover", NexusIconType.Discover),
+    Situations("Situations", NexusIconType.Discover),
     Memory("Memory", NexusIconType.Memory),
     Activity("Activity", NexusIconType.Activity),
     Settings("Settings", NexusIconType.Settings),
@@ -39,6 +37,7 @@ fun NexusApp(viewModel: CaptureViewModel = hiltViewModel()) {
     val context = androidx.compose.ui.platform.LocalContext.current
     val snackbars = remember { SnackbarHostState() }
     var savedRevision by remember { mutableIntStateOf(state.saveRevision) }
+
     val imagePicker = rememberLauncherForActivityResult(ActivityResultContracts.GetContent()) { uri ->
         if (uri != null) {
             val shareIntent = Intent(Intent.ACTION_SEND)
@@ -95,18 +94,12 @@ fun NexusApp(viewModel: CaptureViewModel = hiltViewModel()) {
             }
         },
         bottomBar = {
-            NavigationBar(
-                containerColor = NexusColors.Surface,
-                tonalElevation = 0.dp,
-            ) {
+            NavigationBar(containerColor = NexusColors.Surface, tonalElevation = 0.dp) {
                 NexusDestination.entries.forEach { item ->
                     val selected = destination == item
                     NavigationBarItem(
                         selected = selected,
-                        onClick = {
-                            destination = item
-                            showCapture = false
-                        },
+                        onClick = { destination = item; showCapture = false },
                         icon = {
                             NexusIcon(
                                 item.icon,
@@ -115,9 +108,7 @@ fun NexusApp(viewModel: CaptureViewModel = hiltViewModel()) {
                                 NexusColors.Violet,
                             )
                         },
-                        label = {
-                            Text(item.label, maxLines = 1, style = MaterialTheme.typography.labelSmall)
-                        },
+                        label = { Text(item.label, maxLines = 1, style = MaterialTheme.typography.labelSmall) },
                         colors = NavigationBarItemDefaults.colors(
                             indicatorColor = NexusColors.VioletSoft,
                             selectedTextColor = NexusColors.Violet,
@@ -141,8 +132,8 @@ fun NexusApp(viewModel: CaptureViewModel = hiltViewModel()) {
         } else {
             when (destination) {
                 NexusDestination.ForYou -> HomeScreen(padding)
+                NexusDestination.Situations -> DiscoverScreen(padding)
                 NexusDestination.Memory -> ObservationsScreen(padding)
-                NexusDestination.Discover -> DiscoverScreen(padding)
                 NexusDestination.Activity -> ActivityScreen(padding)
                 NexusDestination.Settings -> SettingsV2Screen(
                     padding = padding,
@@ -150,7 +141,7 @@ fun NexusApp(viewModel: CaptureViewModel = hiltViewModel()) {
                     onNotificationSettings = notificationSettings,
                     onUsageSettings = usageSettings,
                     onRefreshUsage = viewModel::captureUsage,
-                    onRebuild = viewModel::refreshContext,
+                    onRebuild = viewModel::rebuildContext,
                 )
             }
         }
@@ -177,12 +168,12 @@ private fun AddToMemoryScreen(
     ) {
         NexusScreenHeader(
             title = "Add to Memory",
-            subtitle = "Save something once. Let NEXUS connect it later.",
+            subtitle = "Capture now. NEXUS will connect it to people, situations and open loops locally.",
         )
         NexusCard(accent = NexusColors.Violet) {
-            Text("Good things to save", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold)
+            Text("Save anything worth finding again", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold)
             Text(
-                "A request, link, appointment, decision, idea, screenshot or detail you may want to find again.",
+                "A request, promise, link, appointment, decision, amount, screenshot or detail. Saving is immediate; enrichment happens after capture.",
                 color = NexusColors.TextSecondary,
             )
         }
@@ -198,9 +189,7 @@ private fun AddToMemoryScreen(
                 onClick = onSave,
                 enabled = draft.isNotBlank() && !busy,
                 modifier = Modifier.weight(1f),
-            ) {
-                Text(if (busy) "Saving…" else "Save text")
-            }
+            ) { Text(if (busy) "Saving…" else "Save") }
             OutlinedButton(
                 onClick = onAddImage,
                 enabled = !busy,
@@ -208,168 +197,14 @@ private fun AddToMemoryScreen(
             ) {
                 NexusIcon(NexusIconType.Image, Modifier.size(18.dp), NexusColors.Cyan, NexusColors.Violet)
                 Spacer(Modifier.width(8.dp))
-                Text("Add image")
+                Text("Image")
             }
         }
         Text(
-            "Images are copied into private NEXUS storage and scanned locally for searchable text when supported.",
+            "Images are copied into private NEXUS storage. Searchable text extraction and local enrichment run without uploading the image to NEXUS servers.",
             color = NexusColors.TextSecondary,
             style = MaterialTheme.typography.bodySmall,
         )
         TextButton(onClick = onBack, enabled = !busy) { Text("Back") }
-    }
-}
-
-@Composable
-private fun SettingsScreen(
-    padding: PaddingValues,
-    state: CaptureUiState,
-    onNotificationSettings: () -> Unit,
-    onUsageSettings: () -> Unit,
-    onRefreshUsage: () -> Unit,
-    onRebuild: () -> Unit,
-) {
-    Column(
-        Modifier.fillMaxSize()
-            .padding(padding)
-            .verticalScroll(rememberScrollState())
-            .padding(18.dp),
-        verticalArrangement = Arrangement.spacedBy(14.dp),
-    ) {
-        NexusScreenHeader(
-            title = "Settings",
-            subtitle = "Control, privacy and permissions.",
-        )
-
-        AccessCard(
-            title = "Notification observation",
-            enabled = state.notificationAccess,
-            description = "Notification text is observed locally. Android controls which notifications are exposed.",
-            icon = NexusIconType.Activity,
-            onClick = onNotificationSettings,
-        )
-
-        AccessCard(
-            title = "App usage signals",
-            enabled = state.usageAccess,
-            description = "Recent usage helps NEXUS detect behavioral patterns without uploading your app history.",
-            icon = NexusIconType.Discover,
-            onClick = onUsageSettings,
-        )
-
-        if (state.usageAccess) {
-            OutlinedButton(
-                onClick = onRefreshUsage,
-                enabled = !state.busy,
-                modifier = Modifier.fillMaxWidth(),
-            ) { Text("Refresh app usage") }
-        }
-
-        NexusInfoCard(
-            title = "Location",
-            status = "Not requested",
-            body = "NEXUS does not request location permission in this release.",
-            icon = NexusIconType.Web,
-            accent = NexusColors.TextSecondary,
-        )
-
-        NexusInfoCard(
-            title = "Privacy",
-            status = "On-device",
-            body = "Observations, OCR text, actions and understanding stay in NEXUS local storage.",
-            icon = NexusIconType.Saved,
-            accent = NexusColors.Mint,
-        )
-
-        NexusInfoCard(
-            title = "Memory intelligence",
-            status = "Active",
-            body = "Search includes typo tolerance, bilingual concept matching and OCR text extracted from supported images.",
-            icon = NexusIconType.Memory,
-            accent = NexusColors.Cyan,
-        )
-
-        NexusInfoCard(
-            title = "Suggestion quality",
-            status = "Noise filtered",
-            body = "Promotions, review requests, social reactions and passive status notifications are suppressed before actions are surfaced.",
-            icon = NexusIconType.Discover,
-            accent = NexusColors.Violet,
-        )
-
-        OutlinedButton(
-            onClick = onRebuild,
-            enabled = !state.busy,
-            modifier = Modifier.fillMaxWidth(),
-        ) { Text("Rebuild local context") }
-
-        HorizontalDivider(color = NexusColors.Border)
-
-        NexusCard {
-            Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
-                Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
-                    Text("About", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold)
-                    Text("NEXUS ${BuildConfig.VERSION_NAME} · ${BuildConfig.VERSION_CODE}", color = NexusColors.Cyan)
-                }
-                NexusStatusPill("LOCAL-FIRST", NexusColors.Mint)
-            }
-            Text(
-                "Observe → Understand → Connect → Prioritize → Suggest → Act → Learn",
-                color = NexusColors.TextSecondary,
-                style = MaterialTheme.typography.bodySmall,
-            )
-        }
-
-        if (state.busy) LinearProgressIndicator(Modifier.fillMaxWidth())
-        Spacer(Modifier.height(88.dp))
-    }
-}
-
-@Composable
-private fun AccessCard(
-    title: String,
-    enabled: Boolean,
-    description: String,
-    icon: NexusIconType,
-    onClick: () -> Unit,
-) {
-    NexusCard(accent = if (enabled) NexusColors.Mint else NexusColors.TextMuted) {
-        Row(
-            Modifier.fillMaxWidth(),
-            horizontalArrangement = Arrangement.SpaceBetween,
-            verticalAlignment = Alignment.CenterVertically,
-        ) {
-            Row(horizontalArrangement = Arrangement.spacedBy(12.dp), verticalAlignment = Alignment.CenterVertically) {
-                NexusIcon(icon, Modifier.size(28.dp), NexusColors.Cyan, NexusColors.Violet)
-                Text(title, style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold)
-            }
-            NexusStatusPill(if (enabled) "CONNECTED" else "OFF", if (enabled) NexusColors.Mint else NexusColors.TextMuted)
-        }
-        Text(description, color = NexusColors.TextSecondary, style = MaterialTheme.typography.bodyMedium)
-        TextButton(onClick = onClick) { Text("Manage access") }
-    }
-}
-
-@Composable
-private fun NexusInfoCard(
-    title: String,
-    status: String,
-    body: String,
-    icon: NexusIconType,
-    accent: androidx.compose.ui.graphics.Color,
-) {
-    NexusCard(accent = accent) {
-        Row(
-            Modifier.fillMaxWidth(),
-            horizontalArrangement = Arrangement.SpaceBetween,
-            verticalAlignment = Alignment.CenterVertically,
-        ) {
-            Row(horizontalArrangement = Arrangement.spacedBy(12.dp), verticalAlignment = Alignment.CenterVertically) {
-                NexusIcon(icon, Modifier.size(28.dp), accent, NexusColors.Violet)
-                Text(title, style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold)
-            }
-            NexusStatusPill(status.uppercase(), accent)
-        }
-        Text(body, color = NexusColors.TextSecondary)
     }
 }

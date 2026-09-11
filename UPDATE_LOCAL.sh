@@ -2,7 +2,7 @@
 set -euo pipefail
 umask 077
 
-# Safe normal update only. Never uninstalls, clears data, or changes package lineage.
+# Safe NEXUS 3.0 normal update. Never uninstalls, clears data, or changes package lineage.
 input_apk="${1:?Usage: bash UPDATE_LOCAL.sh candidate.apk expected_sha256}"
 expected_sha="${2:?Provide the SHA-256 published with the validated candidate}"
 [[ -f "$input_apk" ]] || { echo 'Candidate APK not found'; exit 2; }
@@ -14,11 +14,8 @@ for binary in adb apksigner sha256sum; do
   command -v "$binary" >/dev/null || { echo "Missing $binary"; exit 4; }
 done
 
-# NEXUS development uses this primary ADB target unless explicitly overridden.
 device="${NEXUS_ADB_DEVICE:-127.0.0.1:5555}"
-adb -s "$device" get-state >/dev/null 2>&1 || {
-  adb connect "$device" >/dev/null 2>&1 || true
-}
+adb -s "$device" get-state >/dev/null 2>&1 || { adb connect "$device" >/dev/null 2>&1 || true; }
 adb -s "$device" get-state >/dev/null 2>&1 || { echo "ADB device unavailable: $device"; exit 5; }
 
 package='com.kareem.nexus'
@@ -64,7 +61,7 @@ new_cert="$(cert_digest "$work_dir/update.apk")"
 unset NEXUS_STORE_PASSWORD NEXUS_KEY_PASSWORD
 output_dir="$HOME/NEXUS_UPDATES"
 mkdir -p "$output_dir"
-output_apk="$output_dir/NEXUS-2.0.0-signed.apk"
+output_apk="$output_dir/NEXUS-3.0.0-signed.apk"
 cp "$work_dir/update.apk" "$output_apk"
 
 adb -s "$device" install -r "$output_apk"
@@ -72,8 +69,8 @@ adb -s "$device" shell am start -n com.kareem.nexus/.MainActivity >/dev/null
 
 installed_version="$(adb -s "$device" shell dumpsys package "$package" | tr -d '\r' | awk -F= '/versionName=/{print $2; exit}')"
 installed_code="$(adb -s "$device" shell dumpsys package "$package" | tr -d '\r' | sed -n 's/.*versionCode=\([0-9][0-9]*\).*/\1/p' | head -1)"
-[[ "$installed_version" == "2.0.0" ]] || { echo "Unexpected installed versionName: ${installed_version:-unknown}"; exit 10; }
-[[ "$installed_code" == "200" ]] || { echo "Unexpected installed versionCode: ${installed_code:-unknown}"; exit 10; }
+[[ "$installed_version" == "3.0.0" ]] || { echo "Unexpected installed versionName: ${installed_version:-unknown}"; exit 10; }
+[[ "$installed_code" == "300" ]] || { echo "Unexpected installed versionCode: ${installed_code:-unknown}"; exit 10; }
 
 echo "UPDATE_OK"
 echo "APK: $output_apk"

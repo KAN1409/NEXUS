@@ -1,59 +1,56 @@
-# NEXUS Release and Signing
+# NEXUS 3.0 RELEASE
 
-## Core rule
-Android updates must preserve both the application ID and the permanent NEXUS signing identity.
+## Release identity
 
-Package:
-`com.kareem.nexus`
+- Package: `com.kareem.nexus`
+- Candidate version: `3.0.0` (`300`)
+- Branch: `v3/unified-intelligence-migration`
+- Database: Room schema `3`
+- Normal update path: existing signed NEXUS → signed NEXUS 3.0 using `adb install -r`
 
-## Secret handling
-The permanent NEXUS keystore must remain outside Git.
+## Permanent signing
 
-Never commit:
-- `*.jks`
-- `*.keystore`
-- key passwords
-- store passwords
-- base64-encoded keystores
+The permanent keystore/password stay on the user's device under `~/NEXUS_SIGNING`. They must never be committed or uploaded to CI.
 
-The active local v2 keystore is expected at:
-`$HOME/NEXUS_SIGNING/nexus-release-v2.jks`
+The validation APK produced by GitHub Actions is not the final installed signing artifact. The user signs it locally through `UPDATE_LOCAL.sh`, which:
 
-`SIGN_RELEASE.sh` should obtain credentials from the local protected password file/environment and must never print or commit them.
+1. verifies the published candidate SHA-256;
+2. pulls the currently installed NEXUS APK and reads its signer;
+3. signs the candidate with the local permanent NEXUS key;
+4. refuses to continue if candidate signer and installed signer differ;
+5. installs with `adb install -r` only;
+6. launches NEXUS;
+7. verifies installed version `3.0.0 (300)`.
 
-## Normal local signing
-From the repository root:
+## Local install command
 
-```bash
-./SIGN_RELEASE.sh path/to/input.apk path/to/NEXUS-2.0-signed.apk
-```
-
-Verify before installation:
+After the final CI artifact is downloaded to the phone, use the final SHA-256 published with that artifact:
 
 ```bash
-apksigner verify --verbose --print-certs NEXUS-2.0-signed.apk
+cd ~/NEXUS/NEXUS_Update1
+git fetch origin
+git checkout v3/unified-intelligence-migration
+git pull --ff-only origin v3/unified-intelligence-migration
+
+NEXUS_ADB_DEVICE=127.0.0.1:5555 \
+  bash ./UPDATE_LOCAL.sh \
+  "/storage/emulated/0/Download/NEXUS-3.0-validation.apk" \
+  <PUBLISHED_SHA256>
 ```
 
-Install only as an update against the intended device:
+Expected terminal end state:
 
-```bash
-adb -s 127.0.0.1:5555 install -r NEXUS-2.0-signed.apk
+```text
+UPDATE_OK
+Version: 3.0.0 (300)
+Existing NEXUS data was preserved.
 ```
 
-Do not uninstall during a normal release.
+## Prohibited release shortcuts
 
-## CI
-CI builds validation APKs and runs unit, migration and emulator acceptance tests. CI artifacts are not the permanent-signed production update. Production signing remains local unless a future release-signing flow uses a secure secret store; signing material must never be embedded in workflow YAML.
-
-## Database safety
-Any Room schema change requires:
-1. Incrementing the Room database version.
-2. Adding an explicit Migration.
-3. Exporting the new schema.
-4. Adding/updating migration tests.
-5. Verifying upgrade from every still-supported schema version.
-
-NEXUS 2.0 uses Room schema 2 and must migrate existing schema-1 installs through `MIGRATION_1_2`; destructive fallback is not an acceptable release path.
-
-## One-time signer recovery
-`RECOVER_SIGNING.sh` is an emergency-only path for a lost/unusable signing identity. It must not be used for normal NEXUS 2.0 installation. The normal path is permanent local signing plus `adb install -r` so app data and package lineage remain intact.
+- Do not uninstall NEXUS.
+- Do not clear app data.
+- Do not use a different signer.
+- Do not use destructive Room migration.
+- Do not merge the release branch to `main` before real-device acceptance.
+- Do not call the release Done merely because CI is green.

@@ -1,34 +1,53 @@
-# NEXUS current state
+# NEXUS STATE
 
-- Repository: `KAN1409/NEXUS`
-- Final integration branch: `v2/personal-intelligence-rebuild`
-- Candidate: versionName `2.0.0`, versionCode `200`.
-- Application ID remains `com.kareem.nexus`.
-- Room schema is version 2 with an explicit, data-preserving `1 -> 2` migration and migration instrumentation test.
-- Permanent v2 signing identity remains local to the user's device. CI artifacts are validation APKs and must be signed locally before normal installation.
+## Active release candidate
 
-## Product loop
-OBSERVE → UNDERSTAND → CONNECT → PRIORITIZE → SUGGEST → ACT → LEARN
+- Branch: `v3/unified-intelligence-migration`
+- Package: `com.kareem.nexus`
+- Version: `3.0.0` (`300`)
+- Room schema: `3`
+- Release status: **candidate only** until CI and real-device acceptance pass.
+- `main` must remain untouched until acceptance.
 
-## NEXUS 2.0 product rebuild
-- For You is centered on a daily brief, Top of mind, connected situations, learned interests, evidence and context-aware next actions.
-- A structured local intelligence layer classifies requests, payments, appointments, deliveries, failures and follow-ups; extracts useful facts such as organization, amount, currency, date, time, URL and order/reference identifiers; ranks urgency/confidence; and suppresses common noise.
-- Connected situations group related observations into one real-world thread instead of surfacing disconnected notification cards.
-- Memory is a dense evidence timeline with full-history search, filters, Arabic/English normalization, typo tolerance, bilingual concept matching, OCR text and optional on-device semantic query expansion.
-- Shared images are copied into private NEXUS storage. ML Kit OCR remains the baseline; supported devices can optionally use Gemini Nano through ML Kit Prompt API as a local second-pass text/context layer.
-- Gemini Nano is optional. NEXUS remains usable with deterministic local intelligence when the system model is unavailable, downloading or fails.
-- Suggested actions are context-specific: open source/reply, calendar, track, remind later, review failure and mark done. Marking an item done is tracked separately from dismissing it.
-- Deferred items resurface after the local defer window; legacy `SAVED` defers remain backward-compatible.
-- Repeated identical notification text can be remembered as a new event when Android supplies a new notification `postedAt`, while updates of the same event remain deduplicated.
-- Activity separates Active, Later, Finished and Timeline, with explicit resolved/dismissed outcomes.
-- Settings is a compact control center for Notification Access, Usage Access, local intelligence, optional on-device AI, privacy and version state.
-- Package lineage, update-only installation and permanent signer continuity remain mandatory.
+## Product contract
 
-## Data and privacy boundaries
-- Observations, OCR text, derived understanding, situations, actions and feedback are stored in the local app database/private app storage.
-- App usage captures summarized recent behavioral signals rather than content.
-- The deterministic intelligence layer is heuristic and confidence-ranked; it does not claim perfect understanding.
-- Optional Gemini Nano inference is on-device and fail-closed; it is not required for core behavior.
+NEXUS 3 is value-first. Its two primary jobs are:
 
-## Release gate
-Do not merge to `main` or call NEXUS 2.0 shipped until the latest branch head has a fully green CI run and the signed APK passes real-device update acceptance on the existing Samsung installation: signer continuity, data preservation, Room migration, launch/navigation, permission truth, Memory search, Top of mind quality, action lifecycle and UI review.
+1. Do not let the user forget something that needs action.
+2. Find something the user has seen or saved even when the query is vague.
+
+Primary pipeline:
+
+`Capture → Remember → Understand → Connect → Open Loop → Act → Outcome → Learn`
+
+## Implemented in 3.0
+
+- Existing observations and permissions are preserved; no uninstall is required.
+- Explicit Room `2 → 3` migration adds persistent open loops, situation snapshots and action execution outcomes.
+- Requests, payments, appointments, delivery updates, failures and follow-ups can become persistent open loops.
+- Open loops have `OPEN`, `WAITING`, `SNOOZED`, `RESOLVED` and `DISMISSED` states that survive intelligence rebuilds.
+- Home is now `Needs you`, `Waiting on`, `Upcoming`, `Changed` and an intentional all-clear state. Theme percentages are no longer a primary product surface.
+- Situations show current state, what changed, evidence count, open-loop count and next step.
+- Real Android actions include opening the source app, calendar insertion, dialer, navigation, copy and available tracking links.
+- Reminders are scheduled locally through WorkManager and surface through a NEXUS notification channel.
+- Activity records real action execution outcomes as well as NEXUS lifecycle events.
+- Memory search handles Arabic/English concepts, typo tolerance, vague filler language, Arabic digits and remembered numeric anchors such as an amount.
+- Captured evidence is backfilled into the existing local Memory/Entity tables during intelligence rebuild.
+- Optional Gemini Nano remains an enhancement. The deterministic local engine is always the fallback.
+
+## Intentional limitations / truthful boundaries
+
+- Memory retrieval is currently hybrid lexical/fuzzy/concept + optional Nano query expansion. It is **not** yet a neural embedding index.
+- Bundled ML Kit printed-text OCR is the default recognizer and does not provide native printed-Arabic script recognition. Nano image-text extraction is an optional supported-device assist, not a guaranteed OCR engine.
+- Android does not guarantee deep-linking to the exact original notification/message in every third-party app. NEXUS opens the source app when a safe exact destination is unavailable.
+- Reminder delivery requires Android notification permission and notification delivery to be enabled for NEXUS.
+- NEXUS does not request location permission in 3.0.
+- Irreversible third-party actions are not silently executed.
+
+## Safety / release invariants
+
+- Never change package lineage.
+- Never require uninstall for a normal update.
+- Never use destructive Room migration.
+- Permanent signing identity stays on the user's device and is never committed.
+- CI APKs are validation artifacts; the local updater signs them with the installed app's permanent signer before `adb install -r`.

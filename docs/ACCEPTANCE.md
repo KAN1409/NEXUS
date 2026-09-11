@@ -1,42 +1,100 @@
-# NEXUS 2.0 Acceptance
+# NEXUS 3.0 ACCEPTANCE
 
-NEXUS 2.0 is releasable only when every applicable gate passes on the latest branch head.
+NEXUS is not accepted because it compiles or looks polished. It is accepted only if it provides useful personal intelligence on the real device.
 
-## Automated release gates
-1. Unit tests pass.
-2. Debug APK and Android test APK compile.
-3. Room `1 -> 2` migration test preserves legacy observations and creates the new structured-intelligence tables.
-4. Emulator UI acceptance passes across For You, Memory, Discover, Activity and Settings.
-5. Capture, search, navigation and Activity recreation pass.
-6. English and Arabic request/appointment/payment classification tests pass.
-7. Promotional feedback prompts, passive social/story noise and NEXUS self-notifications are suppressed.
-8. Memory typo tolerance and bilingual concept matching tests pass.
-9. No destructive Room migration is introduced.
+## Automated gates
 
-## Installed-device gates
-10. Candidate is signed with the permanent NEXUS v2 signing identity and installs only with `adb install -r` over the existing app.
-11. Existing Memory, actions, feedback and interests survive the Room v1 -> v2 migration.
-12. Package remains `com.kareem.nexus`; signer continuity is verified before install.
-13. No crash on cold launch, resume, capture, navigation, background observation or action interaction.
-14. Notification Access and Usage Access states remain truthful after returning from Android Settings.
-15. Notification capture remembers genuinely new repeated events while deduplicating updates of the same notification event.
-16. App-usage observations remain bounded and do not flood Memory.
-17. Shared images remain stored privately; baseline OCR works when supported, and optional Gemini Nano failure never blocks capture/search.
-18. Memory search/filter behavior is usable with real Arabic and English context; optional semantic expansion improves results without hiding deterministic direct matches.
-19. Top of mind is materially quieter than the old generic-action UI while still surfacing real requests, appointments, payments, deliveries, failures and follow-ups.
-20. Evidence opens correctly from Top of mind and Activity.
-21. Context actions launch the source/calendar when possible and fail safely when Android cannot resolve the target.
-22. `Remind tomorrow` moves the item to Later and deferred items can resurface.
-23. `Done` records a resolved outcome; dismiss/reject remains a distinct outcome.
-24. Connected situations group related evidence instead of duplicating independent cards.
-25. Discover, Activity and Settings show the rebuilt NEXUS 2.0 product model rather than legacy placeholder/generic surfaces.
-26. No dead controls, placeholder screens, package-lineage changes or hidden destructive behavior.
+All must pass on the final commit:
 
-## Five-second product test
-Within five seconds of opening For You, the user should understand what changed, what actually needs attention, what NEXUS connected, what evidence supports it and what useful step can be taken next. If nothing useful needs attention, NEXUS should stay quiet rather than manufacture cards.
+- Unit tests.
+- Debug APK build.
+- Android test APK build.
+- Room migration tests for `1 → 3` and `2 → 3` with legacy data preserved.
+- Repository regression tests including resolved/snoozed open-loop persistence.
+- Emulator UI acceptance.
+- CI validation artifact upload.
 
-## UI target
-The five primary surfaces follow the NEXUS showcase direction: premium dark background, compact cyan/violet accents, strong hierarchy, dense but readable evidence cards, concise status pills and consistent bottom navigation.
+## Product-value gates
 
-## Scope truth
-NEXUS is local-first. Its deterministic intelligence is heuristic and confidence-ranked. Optional Gemini Nano inference is an on-device enhancement, not a requirement or a claim of perfect semantic understanding. OCR quality still depends on image quality and the local recognizer/model available on the device.
+### 1. Direct request
+Capture:
+
+`Ahmed — Please send the quotation today`
+
+Expected:
+- Appears under **Needs you**.
+- Reads as a reply/action required, not a generic theme.
+- Shows source evidence.
+- Offers useful next action(s), reminder and Done.
+
+### 2. Payment + amount
+Capture:
+
+`CIB — payment of 5672 EGP is due today`
+
+Expected:
+- Payment open loop.
+- CIB and amount are visible in useful context.
+- Not presented as an “upcoming commitment” or generic percentage.
+
+### 3. Related evidence → one Situation
+Add another related CIB payment signal.
+
+Expected:
+- One CIB Situation connects the related evidence.
+- Situation shows current state, what changed and evidence count.
+
+### 4. Vague memory recall
+Search:
+
+`الحاجة اللي كان فيها 5672 جنيه`
+
+Expected:
+- Returns the CIB evidence containing 5672 EGP.
+- Exact original wording is not required.
+
+### 5. Resolution
+Mark an open loop Done.
+
+Expected:
+- It immediately leaves **Needs you**.
+- It remains searchable in Memory.
+- It appears in finished/history state.
+- Rebuilding intelligence must not resurrect it.
+
+### 6. Reminder
+Schedule a reminder from an open loop.
+
+Expected:
+- Android notification permission is requested only when needed.
+- A local reminder is actually scheduled.
+- The loop becomes snoozed until the wake time.
+- Reminder delivery opens NEXUS when tapped.
+
+### 7. Real action
+Use an available contextual action.
+
+Expected:
+- Source-app/calendar/dialer/maps/copy action genuinely executes where Android supports it.
+- Success/failure outcome appears in Activity.
+- NEXUS must not claim an action succeeded when Android could not execute it.
+
+### 8. Quiet state
+When nothing unresolved is important:
+
+Expected:
+- Home says nothing important needs the user.
+- It does not fill Home with themes, usage percentages or generic insights merely to avoid an empty screen.
+
+## Final real-device gate
+
+Install the candidate over the existing signed NEXUS using `UPDATE_LOCAL.sh` with no uninstall and no data clear. Confirm:
+
+- version `3.0.0 (300)`;
+- signer is unchanged;
+- existing Memory/evidence is still present;
+- no startup/crash regression;
+- Home, Situations, Memory, Activity and Settings all operate on the migrated database;
+- at least one real notification or saved item produces a useful result.
+
+Only after these gates pass may the release be merged to `main` and called Done.

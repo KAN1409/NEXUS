@@ -36,9 +36,7 @@ class SettingsV2ViewModel @Inject constructor(
     init { refreshAi() }
 
     fun refreshAi() {
-        viewModelScope.launch {
-            _aiState.value = onDeviceAi.state(forceRefresh = true)
-        }
+        viewModelScope.launch { _aiState.value = onDeviceAi.state(forceRefresh = true) }
     }
 }
 
@@ -51,7 +49,6 @@ fun SettingsV2Screen(
     onRefreshUsage: () -> Unit,
     onRebuild: () -> Unit,
     viewModel: SettingsV2ViewModel = hiltViewModel(),
-    captureViewModel: CaptureViewModel = hiltViewModel(),
 ) {
     val aiState by viewModel.aiState.collectAsStateWithLifecycle()
 
@@ -63,7 +60,7 @@ fun SettingsV2Screen(
         item {
             NexusScreenHeader(
                 title = "Settings",
-                subtitle = "Control what NEXUS can observe, understand and act on.",
+                subtitle = "Sources, local intelligence, reminders and privacy.",
             )
         }
 
@@ -72,7 +69,7 @@ fun SettingsV2Screen(
             SettingsRow(
                 icon = NexusIconType.Activity,
                 title = "Notification observation",
-                subtitle = "Read notification text locally",
+                subtitle = "Turn notification content into searchable evidence and open loops",
                 status = if (state.notificationAccess) "Enabled" else "Off",
                 statusColor = if (state.notificationAccess) NexusColors.Mint else NexusColors.TextMuted,
                 onClick = onNotificationSettings,
@@ -82,7 +79,7 @@ fun SettingsV2Screen(
             SettingsRow(
                 icon = NexusIconType.Discover,
                 title = "App usage signals",
-                subtitle = "Recent usage patterns, not content",
+                subtitle = "Optional low-detail usage context; never a primary task feed",
                 status = if (state.usageAccess) "Enabled" else "Off",
                 statusColor = if (state.usageAccess) NexusColors.Mint else NexusColors.TextMuted,
                 onClick = onUsageSettings,
@@ -93,7 +90,7 @@ fun SettingsV2Screen(
                 SettingsRow(
                     icon = NexusIconType.Activity,
                     title = "Refresh usage snapshot",
-                    subtitle = "Update recent behavioral signals",
+                    subtitle = "Update recent behavioral context",
                     status = if (state.busy) "Working" else "Run",
                     statusColor = NexusColors.Cyan,
                     enabled = !state.busy,
@@ -102,7 +99,36 @@ fun SettingsV2Screen(
             }
         }
 
-        item { CompactSectionTitle("Intelligence") }
+        item { CompactSectionTitle("Value engine") }
+        item {
+            SettingsRow(
+                icon = NexusIconType.Activity,
+                title = "Open loops",
+                subtitle = "Requests, waiting-on items, payments, failures and upcoming commitments",
+                status = "Active",
+                statusColor = NexusColors.Cyan,
+            )
+        }
+        item {
+            SettingsRow(
+                icon = NexusIconType.Saved,
+                title = "Real actions",
+                subtitle = "Open source apps, calendar, reminders, navigation, dialer and copy",
+                status = "Enabled",
+                statusColor = NexusColors.Mint,
+            )
+        }
+        item {
+            SettingsRow(
+                icon = NexusIconType.Memory,
+                title = "Memory recall",
+                subtitle = "Arabic/English fuzzy recall, numeric anchors, OCR text and optional Nano expansion",
+                status = "Active",
+                statusColor = NexusColors.Violet,
+            )
+        }
+
+        item { CompactSectionTitle("On-device intelligence") }
         item {
             val aiLabel = when (aiState) {
                 OnDeviceAiState.READY -> "Ready"
@@ -119,12 +145,12 @@ fun SettingsV2Screen(
             }
             SettingsRow(
                 icon = NexusIconType.Discover,
-                title = "On-device AI",
+                title = "Gemini Nano assist",
                 subtitle = when (aiState) {
-                    OnDeviceAiState.READY -> "Gemini Nano can enrich image and context understanding locally"
-                    OnDeviceAiState.DOWNLOADABLE -> "Supported by this device; system model is not ready yet"
+                    OnDeviceAiState.READY -> "Can enrich image/context understanding locally when useful"
+                    OnDeviceAiState.DOWNLOADABLE -> "Supported by this device; Android model is not ready yet"
                     OnDeviceAiState.DOWNLOADING -> "Android is preparing the local model"
-                    else -> "NEXUS uses its deterministic local engine as a private fallback"
+                    else -> "Deterministic local intelligence remains the required fallback"
                 },
                 status = aiLabel,
                 statusColor = aiColor,
@@ -133,18 +159,9 @@ fun SettingsV2Screen(
         }
         item {
             SettingsRow(
-                icon = NexusIconType.Memory,
-                title = "Memory intelligence",
-                subtitle = "Bilingual search, typo tolerance and image text",
-                status = "Active",
-                statusColor = NexusColors.Cyan,
-            )
-        }
-        item {
-            SettingsRow(
-                icon = NexusIconType.Saved,
-                title = "Suggestion quality",
-                subtitle = "Promotions, reviews and passive social noise are filtered",
+                icon = NexusIconType.Discover,
+                title = "Noise control",
+                subtitle = "Promotions, reviews, social reactions and passive status are suppressed",
                 status = "Filtered",
                 statusColor = NexusColors.Violet,
             )
@@ -152,12 +169,12 @@ fun SettingsV2Screen(
         item {
             SettingsRow(
                 icon = NexusIconType.Activity,
-                title = "Rebuild understanding",
-                subtitle = "Re-evaluate saved evidence and connected situations",
+                title = "Rebuild intelligence",
+                subtitle = "Backfill Memory, Situations and open loops from saved evidence",
                 status = if (state.busy) "Working" else "Run",
                 statusColor = NexusColors.Cyan,
                 enabled = !state.busy,
-                onClick = captureViewModel::rebuildContext,
+                onClick = onRebuild,
             )
         }
 
@@ -166,7 +183,7 @@ fun SettingsV2Screen(
             SettingsRow(
                 icon = NexusIconType.Saved,
                 title = "Privacy",
-                subtitle = "Observations, OCR, situations and actions stay in local app storage",
+                subtitle = "Evidence, OCR, situations, open loops and outcomes stay in local app storage",
                 status = "On-device",
                 statusColor = NexusColors.Mint,
             )
@@ -175,7 +192,7 @@ fun SettingsV2Screen(
             SettingsRow(
                 icon = NexusIconType.Web,
                 title = "Location",
-                subtitle = "NEXUS does not request location permission in this build",
+                subtitle = "No location permission is requested in this release",
                 status = "Not requested",
                 statusColor = NexusColors.TextMuted,
             )
@@ -189,10 +206,7 @@ fun SettingsV2Screen(
                 shape = RoundedCornerShape(NexusRadius.Medium),
                 border = BorderStroke(1.dp, NexusColors.BorderSoft),
             ) {
-                Column(
-                    modifier = Modifier.padding(16.dp),
-                    verticalArrangement = Arrangement.spacedBy(8.dp),
-                ) {
+                Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
                     Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
                         Column {
                             Text("NEXUS", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold)
@@ -205,7 +219,7 @@ fun SettingsV2Screen(
                         NexusStatusPill("LOCAL-FIRST", NexusColors.Mint)
                     }
                     Text(
-                        "Remember → Understand → Connect → Prioritize → Act → Learn",
+                        "Capture → Remember → Understand → Connect → Track → Act → Learn",
                         color = NexusColors.TextSecondary,
                         style = MaterialTheme.typography.bodySmall,
                     )
@@ -265,10 +279,7 @@ private fun SettingsRow(
                     )
                 }
             }
-            Column(
-                modifier = Modifier.weight(1f),
-                verticalArrangement = Arrangement.spacedBy(3.dp),
-            ) {
+            Column(modifier = Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(3.dp)) {
                 Text(title, style = MaterialTheme.typography.titleSmall, fontWeight = FontWeight.Bold)
                 Text(subtitle, color = NexusColors.TextSecondary, style = MaterialTheme.typography.bodySmall)
             }

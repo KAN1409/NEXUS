@@ -42,7 +42,7 @@ class NexusMigrationTest {
         )
         helper.writableDatabase.execSQL(
             "INSERT INTO observations(id,type,rawText,normalizedText,source,metadataJson,createdAt) VALUES(?,?,?,?,?,?,?)",
-            arrayOf("legacy-1", "MANUAL", "Keep me", "keep me", "NEXUS", "{}", 1234L),
+            arrayOf<Any?>("legacy-1", "MANUAL", "Keep me", "keep me", "NEXUS", "{}", 1234L),
         )
         helper.close()
 

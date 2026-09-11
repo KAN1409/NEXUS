@@ -14,6 +14,7 @@ import androidx.hilt.lifecycle.viewmodel.compose.hiltViewModel
 import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.compose.LifecycleEventEffect
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
+import com.kareem.nexus.BuildConfig
 import com.kareem.nexus.ui.design.*
 
 private enum class NexusDestination(val label: String, val icon: NexusIconType) {
@@ -109,7 +110,16 @@ private fun SettingsScreen(padding: PaddingValues, state: CaptureUiState, notifi
             TextButton(onClick = notificationAccess) { Text("Open notification access") }
         }}
         Surface(color = NexusColors.Surface, shape = MaterialTheme.shapes.large) { Column(Modifier.fillMaxWidth().padding(18.dp)) {
-            Text("App usage signals", style = MaterialTheme.typography.titleMedium); Text(if (state.usageAccess) "Access granted" else "Access not granted", color = NexusColors.TextSecondary); TextButton(onClick = usageAccess) { Text("Open usage access") }; if (state.usageAccess) TextButton(onClick = captureUsage) { Text("Capture last 24 hours") }
+            Text("App usage signals", style = MaterialTheme.typography.titleMedium)
+            Text(if (state.usageAccess) "Access granted" else "Access not granted", color = NexusColors.TextSecondary)
+            Text("Usage is summarized locally into behavioral context.", color = NexusColors.TextSecondary)
+            TextButton(onClick = usageAccess) { Text("Open usage access") }
+            if (state.usageAccess) TextButton(onClick = captureUsage) { Text("Refresh last 24 hours") }
+        }}
+        Surface(color = NexusColors.Surface, shape = MaterialTheme.shapes.large) { Column(Modifier.fillMaxWidth().padding(18.dp)) {
+            Text("Local-first privacy", style = MaterialTheme.typography.titleMedium)
+            Text("NEXUS keeps its observation and intelligence database on this device.", color = NexusColors.TextSecondary)
+            Text("Version " + BuildConfig.VERSION_NAME, color = NexusColors.Cyan, style = MaterialTheme.typography.bodySmall)
         }}
     }
 }

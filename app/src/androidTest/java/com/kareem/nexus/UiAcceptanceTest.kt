@@ -45,11 +45,11 @@ class UiAcceptanceTest {
         add("CIB — payment of 5672 EGP is due today")
         add("CIB — please confirm your card payment today")
 
-        // Repository regression separately proves all three raw open loops are preserved. Home is
-        // intentionally situation-level: related CIB evidence collapses into one surfaced item.
-        // Assert the actual user value cards rather than a presentation-copy count.
+        // Home intentionally collapses the two CIB observations into one situation-level card,
+        // so the stable user-visible committed state is exactly two things: Ahmed + CIB.
+        // Waiting on this visible state also removes the capture/enrichment race without sleeps.
         compose.waitUntil(20_000) {
-            compose.onAllNodesWithText("Needs you", useUnmergedTree = true)
+            compose.onAllNodesWithText("2 things need you.", useUnmergedTree = true)
                 .fetchSemanticsNodes().isNotEmpty()
         }
 

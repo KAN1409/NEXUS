@@ -10,6 +10,7 @@ enum class FeedbackSignal {
     DISMISSED,
     ACTED,
     REJECTED,
+    RESOLVED,
     SHARED,
     DWELL,
     SUGGESTED,

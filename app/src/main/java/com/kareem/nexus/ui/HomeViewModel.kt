@@ -118,6 +118,7 @@ class HomeViewModel @Inject constructor(
     fun approveAction(id: String) = action(id) { repository.approveAction(id) }
     fun deferAction(id: String) = action(id) { repository.deferAction(id) }
     fun rejectAction(id: String) = action(id) { repository.rejectAction(id) }
+    fun resolveAction(id: String) = action(id) { repository.resolveAction(id) }
     fun startAction(id: String) = action(id) { repository.startAction(id) }
     fun completeAction(id: String) = action(id) { repository.completeAction(id) }
     fun failAction(id: String) = action(id) { repository.failAction(id) }

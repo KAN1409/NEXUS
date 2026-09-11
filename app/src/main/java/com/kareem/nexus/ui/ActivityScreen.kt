@@ -11,6 +11,7 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.hilt.lifecycle.viewmodel.compose.hiltViewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
+import com.kareem.nexus.core.model.FeedbackSignal
 import com.kareem.nexus.ui.design.NexusColors
 
 private data class ActivityRow(
@@ -24,31 +25,71 @@ private data class ActivityRow(
 @Composable
 fun ActivityScreen(
     contentPadding: PaddingValues,
-    viewModel: HomeViewModel = hiltViewModel(),
+    viewModel: ActivityViewModel = hiltViewModel(),
 ) {
     val state by viewModel.uiState.collectAsStateWithLifecycle()
+    val actionsById = state.actions.associateBy { it.id }
 
     val rows = buildList {
-        state.actions.forEach {
-            val kind = when (it.state.name) {
-                "READY_FOR_APPROVAL" -> "WAITING FOR APPROVAL"
-                "APPROVED" -> "ACTION APPROVED"
-                "EXECUTING" -> "ACTION IN PROGRESS"
-                "COMPLETED" -> "ACTION COMPLETED"
-                "REJECTED" -> "ACTION DISMISSED"
-                "FAILED" -> "ACTION FAILED"
-                "DRAFT" -> "ACTION SAVED FOR LATER"
-                else -> it.state.name.replace('_', ' ')
+        state.events.forEach { event ->
+            val action = actionsById[event.actionId]
+            val kind = when (event.signal) {
+                FeedbackSignal.SUGGESTED -> "SUGGESTED"
+                FeedbackSignal.APPROVED -> "USER APPROVED"
+                FeedbackSignal.DEFERRED -> "DEFERRED FOR 24H"
+                FeedbackSignal.RESURFACED -> "RESURFACED"
+                FeedbackSignal.REJECTED -> "USER DISMISSED"
+                FeedbackSignal.STARTED -> "ACTION STARTED"
+                FeedbackSignal.COMPLETED -> "ACTION COMPLETED"
+                FeedbackSignal.FAILED -> "ACTION FAILED"
+                FeedbackSignal.SAVED -> "SAVED"
+                FeedbackSignal.ACTED -> "ACTION TAKEN"
+                FeedbackSignal.DISMISSED -> "DISMISSED"
+                FeedbackSignal.OPENED -> "OPENED"
+                FeedbackSignal.SHARED -> "SHARED"
+                FeedbackSignal.DWELL -> "VIEWED"
             }
-            add(ActivityRow("a_${it.id}", it.title, it.description, kind, it.createdAt))
+            add(
+                ActivityRow(
+                    id = "e_${event.id}",
+                    title = action?.title ?: "NEXUS action",
+                    detail = action?.description.orEmpty(),
+                    kind = kind,
+                    createdAt = event.createdAt,
+                )
+            )
         }
+
         state.discoveries.forEach {
-            add(ActivityRow("d_${it.id}", it.title, it.summary, "PATTERN DETECTED", it.createdAt))
+            add(
+                ActivityRow(
+                    id = "d_${it.id}",
+                    title = it.title,
+                    detail = it.summary,
+                    kind = "INFERRED PATTERN",
+                    createdAt = it.createdAt,
+                )
+            )
         }
-        state.observations.take(12).forEach {
-            add(ActivityRow("o_${it.id}", it.rawText.take(80), it.source.orEmpty(), it.type.name.replace('_', ' '), it.createdAt))
-        }
-    }.sortedByDescending { it.createdAt }.take(30)
+
+        state.observations
+            .filter { it.type.name != "APP_USAGE" }
+            .take(12)
+            .forEach {
+                add(
+                    ActivityRow(
+                        id = "o_${it.id}",
+                        title = it.rawText.take(80),
+                        detail = it.source.orEmpty(),
+                        kind = "OBSERVED · ${it.type.name.replace('_', ' ')}",
+                        createdAt = it.createdAt,
+                    )
+                )
+            }
+    }
+        .distinctBy { it.id }
+        .sortedByDescending { it.createdAt }
+        .take(40)
 
     LazyColumn(
         modifier = Modifier.fillMaxSize(),
@@ -63,7 +104,7 @@ fun ActivityScreen(
         item {
             Text("Activity", style = MaterialTheme.typography.headlineLarge, fontWeight = FontWeight.Bold)
             Text(
-                "From observation to action.",
+                "Observed → inferred → suggested → decided → result.",
                 color = NexusColors.TextSecondary,
                 style = MaterialTheme.typography.titleMedium,
             )

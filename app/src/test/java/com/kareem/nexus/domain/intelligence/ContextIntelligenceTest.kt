@@ -20,8 +20,21 @@ class ContextIntelligenceTest {
         val attention = ContextIntelligence.buildAttention(listOf(observation), now = 500L)
         assertEquals(1, attention.size)
         assertEquals(AttentionKind.REQUEST, attention.first().kind)
-        assertEquals(AttentionLevel.URGENT, attention.first().level)
+        assertEquals(AttentionLevel.MEDIUM, attention.first().level)
         assertTrue(ContextIntelligence.suggestedActionFor(observation.rawText, observation.source) != null)
+    }
+
+    @Test
+    fun explicitUrgency_becomesUrgent() {
+        val observation = Observation(
+            id = "urgent",
+            type = ObservationType.NOTIFICATION,
+            rawText = "Please confirm the quotation ASAP",
+            source = "com.example.mail",
+            createdAt = 100L,
+        )
+        val attention = ContextIntelligence.buildAttention(listOf(observation), now = 500L)
+        assertEquals(AttentionLevel.URGENT, attention.first().level)
     }
 
     @Test

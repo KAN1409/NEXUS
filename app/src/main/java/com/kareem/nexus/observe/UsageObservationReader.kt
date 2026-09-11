@@ -5,6 +5,7 @@ import android.app.usage.UsageStatsManager
 import android.content.Context
 import android.content.Intent
 import android.provider.Settings
+import androidx.core.app.NotificationManagerCompat
 import com.kareem.nexus.core.model.ObservationType
 import com.kareem.nexus.domain.repository.NexusRepository
 import dagger.hilt.android.qualifiers.ApplicationContext
@@ -25,32 +26,46 @@ class UsageObservationReader @Inject constructor(
         ) == AppOpsManager.MODE_ALLOWED
     }
 
-    fun settingsIntent(): Intent = Intent(Settings.ACTION_USAGE_ACCESS_SETTINGS).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+    fun hasNotificationAccess(): Boolean =
+        NotificationManagerCompat.getEnabledListenerPackages(context)
+            .contains(context.packageName)
+
+    fun settingsIntent(): Intent =
+        Intent(Settings.ACTION_USAGE_ACCESS_SETTINGS).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
 
     suspend fun captureLast24Hours(): Int {
         if (!hasAccess()) return 0
+
         val manager = context.getSystemService(UsageStatsManager::class.java)
         val end = System.currentTimeMillis()
         val start = end - 24L * 60L * 60L * 1000L
-        val rows = manager.queryUsageStats(UsageStatsManager.INTERVAL_DAILY, start, end).orEmpty()
+
+        val rows = manager.queryUsageStats(UsageStatsManager.INTERVAL_DAILY, start, end)
+            .orEmpty()
             .filter { it.totalTimeInForeground > 0 && it.packageName != context.packageName }
             .groupBy { it.packageName }
             .mapValues { (_, stats) -> stats.sumOf { it.totalTimeInForeground } }
             .toList()
             .sortedByDescending { it.second }
-            .take(20)
+            .take(12)
+
+        repository.pruneUsageSources(rows.map { it.first })
+
         rows.forEach { (packageName, foregroundMs) ->
             val label = runCatching {
                 val info = context.packageManager.getApplicationInfo(packageName, 0)
                 context.packageManager.getApplicationLabel(info).toString()
             }.getOrDefault(packageName.substringAfterLast('.'))
+
+            val minutes = (foregroundMs / 60_000L).coerceAtLeast(1L)
             repository.captureObservation(
                 ObservationType.APP_USAGE,
-                "$label · ${foregroundMs / 60000} min in the last 24 hours",
+                "$label · $minutes min in the last 24 hours",
                 packageName,
-                "{\"foregroundMs\":$foregroundMs}",
+                "{\"foregroundMs\":$foregroundMs,\"windowHours\":24}",
             )
         }
+
         return rows.size
     }
 }

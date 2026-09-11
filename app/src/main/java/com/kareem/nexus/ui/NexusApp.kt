@@ -144,7 +144,7 @@ fun NexusApp(viewModel: CaptureViewModel = hiltViewModel()) {
                 NexusDestination.Memory -> ObservationsScreen(padding)
                 NexusDestination.Discover -> DiscoverScreen(padding)
                 NexusDestination.Activity -> ActivityScreen(padding)
-                NexusDestination.Settings -> SettingsScreen(
+                NexusDestination.Settings -> SettingsV2Screen(
                     padding = padding,
                     state = state,
                     onNotificationSettings = notificationSettings,

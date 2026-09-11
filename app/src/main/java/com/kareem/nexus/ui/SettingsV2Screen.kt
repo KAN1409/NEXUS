@@ -24,7 +24,6 @@ import dagger.hilt.android.lifecycle.HiltViewModel
 import javax.inject.Inject
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.asStateFlow
-import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
 
 @HiltViewModel
@@ -52,6 +51,7 @@ fun SettingsV2Screen(
     onRefreshUsage: () -> Unit,
     onRebuild: () -> Unit,
     viewModel: SettingsV2ViewModel = hiltViewModel(),
+    captureViewModel: CaptureViewModel = hiltViewModel(),
 ) {
     val aiState by viewModel.aiState.collectAsStateWithLifecycle()
 
@@ -157,7 +157,7 @@ fun SettingsV2Screen(
                 status = if (state.busy) "Working" else "Run",
                 statusColor = NexusColors.Cyan,
                 enabled = !state.busy,
-                onClick = onRebuild,
+                onClick = captureViewModel::rebuildContext,
             )
         }
 

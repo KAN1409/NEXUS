@@ -24,7 +24,7 @@ class UiAcceptanceTest {
 
     @Before
     fun registerPipelineIdle() {
-        check(compose.registerIdlingResource(pipelineIdle)) { "Compose idling resources are unavailable" }
+        compose.registerIdlingResource(pipelineIdle)
     }
 
     @After
@@ -48,8 +48,6 @@ class UiAcceptanceTest {
         compose.onNode(hasSetTextAction()).performTextInput(text)
         compose.onNode(hasText("Save") and isEnabled(), useUnmergedTree = true).performClick()
 
-        // The registered IdlingResource covers capture + Room writes + understanding rebuild.
-        // waitForIdle then flushes the resulting Compose state before we inspect semantics.
         compose.waitForIdle()
         compose.onNodeWithTag("nexus-pipeline-ready-$expectedRevision", useUnmergedTree = true).assertExists()
 

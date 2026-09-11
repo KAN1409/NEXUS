@@ -146,6 +146,7 @@ class OfflineNexusRepository @Inject constructor(
                     createdAt = now - index,
                 )
             )
+        }
 
         dao.clearGeneratedActions()
 
@@ -183,7 +184,6 @@ class OfflineNexusRepository @Inject constructor(
                     updatedAt = now - 200,
                 )
             )
-        }
         }
     }
 

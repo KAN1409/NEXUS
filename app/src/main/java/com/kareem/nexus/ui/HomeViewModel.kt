@@ -145,9 +145,12 @@ class HomeViewModel @Inject constructor(
         emit(HomeUiState(error = "Could not load your context. Reopen NEXUS to retry."))
     }
 
+    // Home is a persistent intelligence surface, not a transient screen. Keep its repository
+    // subscriptions hot while the Activity is alive so captures and background enrichment cannot
+    // leave For You showing stale state when the user returns from Add/Memory/Settings.
     val uiState = combine(content, error, pending) { state, message, busy ->
         state.copy(error = message ?: state.error, pending = busy)
-    }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), HomeUiState())
+    }.stateIn(viewModelScope, SharingStarted.Eagerly, HomeUiState())
 
     private fun action(id: String, block: suspend () -> Unit) {
         if (id in pending.value) return

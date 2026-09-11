@@ -28,7 +28,7 @@ fun NexusApp(viewModel: CaptureViewModel = hiltViewModel()) {
     val context = LocalContext.current
 
     LifecycleEventEffect(Lifecycle.Event.ON_RESUME) {
-        viewModel.refreshAccessState()
+        viewModel.refreshContext()
     }
 
     BackHandler(enabled = showCapture || destination != NexusDestination.ForYou) {

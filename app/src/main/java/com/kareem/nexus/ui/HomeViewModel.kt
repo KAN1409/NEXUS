@@ -4,6 +4,7 @@ import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.kareem.nexus.core.model.*
 import com.kareem.nexus.domain.intelligence.ContextIntelligence
+import com.kareem.nexus.domain.intelligence.PersonalIntelligenceEngine
 import com.kareem.nexus.domain.repository.NexusRepository
 import dagger.hilt.android.lifecycle.HiltViewModel
 import javax.inject.Inject
@@ -24,6 +25,8 @@ data class HomeUiState(
     val readyActionCount: Int = 0,
     val attention: List<AttentionItem> = emptyList(),
     val situations: List<Situation> = emptyList(),
+    val topOfMind: List<TopOfMindItem> = emptyList(),
+    val contextSituations: List<ContextSituation> = emptyList(),
     val brief: DailyBrief = DailyBrief(
         headline = "NEXUS is getting ready",
         summary = "Your local context will appear here as it becomes useful.",
@@ -64,10 +67,12 @@ class HomeViewModel @Inject constructor(
                 else -> true
             }
         }
-        val attention = ContextIntelligence.buildAttention(
-            ContextIntelligence.unresolved(observations, visibleActions),
-        )
+
+        val unresolved = ContextIntelligence.unresolved(observations, visibleActions)
+        val attention = ContextIntelligence.buildAttention(unresolved)
         val situations = ContextIntelligence.buildSituations(observations)
+        val topOfMind = PersonalIntelligenceEngine.topOfMind(observations, visibleActions)
+        val contextSituations = PersonalIntelligenceEngine.buildSituations(observations)
 
         HomeUiState(
             observationCount = observationCount,
@@ -76,9 +81,11 @@ class HomeViewModel @Inject constructor(
             interests = interests,
             discoveries = discoveries,
             actions = visibleActions,
-            readyActionCount = visibleActions.count { it.state == ActionState.READY_FOR_APPROVAL },
+            readyActionCount = topOfMind.size,
             attention = attention,
             situations = situations,
+            topOfMind = topOfMind,
+            contextSituations = contextSituations,
             brief = ContextIntelligence.buildDailyBrief(observations, interests, attention),
             insights = ContextIntelligence.buildInsights(observations, interests, situations),
         )

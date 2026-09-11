@@ -7,7 +7,6 @@ import androidx.test.platform.app.InstrumentationRegistry
 import com.kareem.nexus.core.NexusWorkTracker
 import java.io.FileInputStream
 import org.junit.After
-import org.junit.Assert.assertTrue
 import org.junit.Before
 import org.junit.Rule
 import org.junit.Test
@@ -61,17 +60,16 @@ class UiAcceptanceTest {
         add("CIB — payment of 5672 EGP is due today")
 
         compose.onNodeWithTag("home-feed", useUnmergedTree = true).assertExists()
+        // Room invalidation and Flow delivery happen after the capture transaction commits, so the
+        // pipeline can be idle a few frames before Home receives the new projection. Wait on the
+        // stable semantic identity of the value card rather than an arbitrary delay or list index.
         compose.waitUntil(15_000) {
             compose.onAllNodesWithTag("open-loop-payment", useUnmergedTree = true)
                 .fetchSemanticsNodes().isNotEmpty()
         }
         compose.onNodeWithTag("open-loop-payment", useUnmergedTree = true).assertExists()
-        // The amount intentionally appears in both the derived title and the evidence detail.
-        // Verify that at least one rendered semantic node contains it without requiring uniqueness.
-        assertTrue(
-            compose.onAllNodesWithText("5672", substring = true, useUnmergedTree = true)
-                .fetchSemanticsNodes().isNotEmpty()
-        )
+        compose.onAllNodesWithText("5672", substring = true, useUnmergedTree = true)
+            .assertAny(hasText("5672", substring = true))
         screenshot("01-home-value")
 
         compose.onNode(navItem("Memory"), useUnmergedTree = true).performClick()
@@ -88,10 +86,15 @@ class UiAcceptanceTest {
         compose.activityRule.scenario.recreate()
         compose.waitForIdle()
 
+        // A Situation is intentionally not created from one isolated notification. Add related
+        // evidence through the real capture UI, then verify that the thread appears and survives
+        // the Activity recreation above.
+        add("CIB — please confirm your card payment today")
         compose.onNode(navItem("Situations"), useUnmergedTree = true).performClick()
         compose.waitUntil(15_000) {
             compose.onAllNodesWithText("CIB", substring = true, useUnmergedTree = true).fetchSemanticsNodes().isNotEmpty()
         }
+        compose.onNodeWithText("2 evidence", substring = true, useUnmergedTree = true).assertExists()
         screenshot("04-situations")
 
         compose.onNode(navItem("Activity"), useUnmergedTree = true).performClick()

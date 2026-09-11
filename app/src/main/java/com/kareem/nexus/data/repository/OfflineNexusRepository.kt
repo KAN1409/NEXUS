@@ -204,8 +204,10 @@ class OfflineNexusRepository @Inject constructor(
             }
             .take(2)
 
-        commitmentSignals.forEachIndexed { index, row ->
-            val id = "action_commitment_$index"
+        commitmentSignals.forEach { row ->
+            // Use the source observation identity rather than list position so a user's
+            // decision stays attached to the same commitment across rebuilds/reordering.
+            val id = "action_commitment_${row.id}"
             if (dao.actionById(id) == null) {
                 dao.upsertAction(
                     ActionEntity(
@@ -214,8 +216,8 @@ class OfflineNexusRepository @Inject constructor(
                         description = row.rawText.take(180),
                         state = ActionState.READY_FOR_APPROVAL.name,
                         payloadJson = "{}",
-                        createdAt = now - 100 - index,
-                        updatedAt = now - 100 - index,
+                        createdAt = row.createdAt,
+                        updatedAt = now,
                     )
                 )
             }
